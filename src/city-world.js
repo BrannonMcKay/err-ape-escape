@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
+import {buildWasteland,buildTimberHandle,CITY_GROUND_Y} from './city-wasteland.js';
 
 const material=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.94,...extra});
 const noise=`
@@ -55,18 +56,23 @@ function textured(kind,color=0xffffff){
   };m.customProgramCacheKey=()=>`city-${kind}-v1`;return m;
 }
 export function cityMaterials(){
-  return {ground:textured('ground'),wall:textured('brick',0xa39483),top:textured('brick',0xb4a696)};
+  return {ground:textured('ground'),wall:textured('brick',0xa39483),top:textured('brick',0x59615d)};
 }
 export function cityPropMaterial(prop){return textured(prop.id==='hammer-head'?'steel':prop.id==='hammer-handle'?'wood':'facade',prop.color);}
 
 function box(parent,mat,x,y,z,w,h,d){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m;}
 function sourcePoint(maze,x,y){return {x:(x/maze.sourceStep-maze.width/2)*maze.cellSize,z:(y/maze.sourceStep-maze.height/2)*maze.cellSize};}
-function signTexture(lines,{background='#e1bc74',foreground='#33292c',border=true}={}){
+function signTexture(lines,{background='#e1bc74',foreground='#33292c',border=true,spray=false}={}){
   const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;const c=canvas.getContext('2d');
   if(background){c.fillStyle=background;c.fillRect(0,0,1024,512);}
   if(border){c.strokeStyle=foreground;c.lineWidth=13;c.strokeRect(18,18,988,476);}
-  c.textAlign='center';c.textBaseline='middle';c.fillStyle=foreground;c.font=`900 ${lines.length===1?150:105}px 'Segoe Print','Comic Sans MS',sans-serif`;
+  c.textAlign='center';c.textBaseline='middle';c.fillStyle=foreground;c.font=`900 ${spray?260:lines.length===1?150:105}px 'Segoe Print','Comic Sans MS',sans-serif`;
+  if(spray){c.shadowColor=foreground;c.shadowBlur=7;c.translate(512,256);c.rotate(-.05);c.translate(-512,-256);}
   lines.forEach((line,i)=>c.fillText(line,512,256+(i-(lines.length-1)/2)*145,950));
+  if(spray){
+    c.shadowBlur=0;c.globalCompositeOperation='destination-out';let seed=12;
+    for(let i=0;i<1400;i++){seed=seed*16807%2147483647;const x=seed%1024;seed=seed*16807%2147483647;c.fillStyle='#0005';c.fillRect(x,seed%512,1+seed%3,1+seed%2);}
+  }
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;return texture;
 }
 function groundSign(world,px,py,width,height,lines,angle=0,lift=.06,style={}){
@@ -74,6 +80,34 @@ function groundSign(world,px,py,width,height,lines,angle=0,lift=.06,style={}){
   const positions=geo.attributes.position;
   for(let i=0;i<positions.count;i++){const x=positions.getX(i)+p.x,z=positions.getZ(i)+p.z;positions.setXYZ(i,x,maze.heightAt(x,z)+lift,z);}geo.computeVertexNormals();
   const sign=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:signTexture(lines,style),transparent:true,roughness:.8,polygonOffset:true,polygonOffsetFactor:-2}));sign.receiveShadow=true;world.scene.add(sign);return sign;
+}
+function cityMural(world){
+  const canvas=document.createElement('canvas');canvas.width=2048;canvas.height=1024;const c=canvas.getContext('2d');
+  c.lineJoin=c.lineCap='round';c.textAlign='center';c.textBaseline='middle';c.font="900 260px 'Segoe Print','Comic Sans MS',sans-serif";
+  c.save();c.translate(650,500);c.rotate(-.045);c.shadowColor='#ef9cbe';c.shadowBlur=12;
+  for(const [text,y,paint] of [['POUND',-150,'#f2b6cc'],['TOWN',135,'#f4d694']]){
+    c.strokeStyle='#2f2936';c.lineWidth=24;c.strokeText(text,0,y,1050);c.fillStyle=paint;c.fillText(text,0,y,1050);
+  }c.restore();
+  // Intentionally wonky felt-tip cat: pointy ears, uneven eyes and a curly tail.
+  function line(points,color='#efdec1',width=17){c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.strokeStyle='#332d37';c.lineWidth=width+13;c.stroke();c.strokeStyle=color;c.lineWidth=width;c.stroke();}
+  c.shadowBlur=7;c.shadowColor='#efdec1';
+  line([[1450,650],[1405,734],[1418,839],[1540,871],[1677,847],[1731,760],[1679,650]]);
+  line([[1400,410],[1372,207],[1517,330],[1612,321],[1758,181],[1740,446],[1770,519],[1743,624],[1630,694],[1484,680],[1387,593],[1375,492],[1400,410]]);
+  line([[1435,371],[1418,291],[1476,349]],'#ef9cbe',10);line([[1652,341],[1718,263],[1702,365]],'#ef9cbe',10);
+  for(const [x,y,r] of [[1480,473,38],[1653,466,46]]){c.beginPath();c.ellipse(x,y,r,r*.84,-.08,0,Math.PI*2);c.fillStyle='#f4d694';c.fill();line([[x+2,y-21],[x-1,y+19]],'#302b34',11);}
+  line([[1550,546],[1606,539],[1580,570],[1550,546]],'#ed94b1',12);
+  line([[1580,570],[1556,603],[1527,597]],'#efdec1',9);line([[1580,570],[1607,605],[1636,590]],'#efdec1',9);
+  for(const d of [-1,0,1]){line([[1490,552+d*15],[1280,530+d*66]],'#efdec1',8);line([[1660,545+d*18],[1870,520+d*60]],'#efdec1',8);}
+  line([[1706,786],[1811,797],[1872,744],[1901,659],[1873,614],[1833,643],[1844,685]],'#efdec1',20);
+  line([[1474,740],[1470,850]],'#efdec1',12);line([[1624,739],[1631,853]],'#efdec1',12);
+  line([[306,827],[894,810],[1072,824]],'#ef9cbe',13);
+  // A few drips make it feel sprayed directly onto the wall.
+  for(const [x,y,h] of [[273,684,108],[515,717,52],[1010,682,75],[1420,617,34]])line([[x,y],[x+2,y+h]],'#e9acba',7);
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
+  const p=sourcePoint(world.maze,1189,840.3),geo=new THREE.PlaneGeometry(17.5,8.4,8,1),positions=geo.attributes.position;
+  for(let i=0;i<positions.count;i++){const x=p.x+positions.getX(i),z=p.z;positions.setXYZ(i,x,world.maze.heightAt(x,z)+5.1+positions.getY(i),z);}geo.computeVertexNormals();
+  const material=world.cutawayMaterial(new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3}));
+  const mural=new THREE.Mesh(geo,material);mural.name='Pound Town cat graffiti · south wall';world.scene.add(mural);
 }
 function batch(scene,geometry,mat,items){
   const mesh=new THREE.InstancedMesh(geometry,mat,items.length),m=new THREE.Matrix4(),q=new THREE.Quaternion(),e=new THREE.Euler();
@@ -90,16 +124,18 @@ export function buildCityDecor(world){
   const sun=new THREE.Mesh(new THREE.SphereGeometry(20,32,20),new THREE.MeshBasicMaterial({color:0xffcf7d,fog:false}));sun.position.set(-153,33,-230);scene.add(sun);
   world.light.color.set(0xffc084);world.light.position.set(-100,95,-95);world.light.intensity=2.1;scene.fog.color.set(0xc69383);
   scene.children.filter(o=>o.isHemisphereLight).forEach(o=>o.intensity=1.5);world.renderer.toneMappingExposure=1.12;
-  const backdrop=box(scene,material(0x65554c),0,-17,0,1000,1,1000);backdrop.castShadow=false;
+  buildWasteland(world,textured('ground'));
+  buildTimberHandle(world);
+  cityMural(world);
   for(let layer=0;layer<2;layer++){
     const ruins=[],ledges=[],r=layer?220:148;
     for(let i=0;i<40;i++){
       const a=i/40*Math.PI*2+.05*random(),x=Math.cos(a)*r,z=Math.sin(a)*r,w=7+random()*12,d=8+random()*11,h=15+random()*49;
       const col=layer?0x7a6572:0x645458;
-      ruins.push({x,y:h/2-15,z,sx:w,sy:h,sz:d,color:col});
+      ruins.push({x,y:h/2+CITY_GROUND_Y,z,sx:w,sy:h,sz:d,color:col});
       // Uneven roofline, exposed core and missing corners.
-      for(let k=0;k<3;k++)ruins.push({x:x+(k-1)*w*.28,y:h-15+random()*7,z:z+d*.15,sx:w*.27,sy:2+random()*9,sz:d*.5,color:col});
-      for(let f=0;f<h/5;f++)ledges.push({x,y:f*5-14,z,sx:w+.3,sy:.15,sz:d+.3});
+      for(let k=0;k<3;k++)ruins.push({x:x+(k-1)*w*.28,y:h+CITY_GROUND_Y+random()*7,z:z+d*.15,sx:w*.27,sy:2+random()*9,sz:d*.5,color:col});
+      for(let f=0;f<h/5;f++)ledges.push({x,y:f*5+CITY_GROUND_Y+1,z,sx:w+.3,sy:.15,sz:d+.3});
     }
     batch(scene,new THREE.BoxGeometry(),textured('facade',layer?0x806d7a:0x786569),ruins).castShadow=false;
     batch(scene,new THREE.BoxGeometry(),material(layer?0x6f5d6b:0x483f49),ledges).castShadow=false;
@@ -109,7 +145,7 @@ export function buildCityDecor(world){
     const row=Math.floor(i/maze.width),col=i%maze.width,p=maze.point(i),y=maze.heightAt(p.x,p.z);
     if(maze.rows[row][col]==='#'&&world.wallStyles[i]===1&&i%3===0){
       const sy=.2+random()*.48;
-      chunks.push({...p,y:y+.85+sy*.24,sx:.28+random()*.16,sy,sz:.24+random()*.18,rx:random()*.7,ry:random()*6,rz:random()*.5,color:random()>.65?0x925643:0xa39a88});
+      chunks.push({...p,y:y+.85+sy*.24,sx:.28+random()*.16,sy,sz:.24+random()*.18,rx:random()*.7,ry:random()*6,rz:random()*.5,color:random()>.65?0x925643:0x636b65});
       if(i%15===0)bricks.push({...p,y:y+.3,sx:.36,sy:.3,sz:.27,ry:random()*.7,color:0x9f604b});
     }
     if(world.wallStyles[i]===2&&i%14===0)rebar.push({...p,y:y+7.9,sx:.023,sy:.7+random()*.8,sz:.023,rz:(random()-.5)*.5});
@@ -130,7 +166,7 @@ export function buildCityDecor(world){
   // The hammer lies in the original silhouette; its square-section head rises
   // fourteen metres. Its lettering stays on the upper face, readable from above.
   groundSign(world,849,550,11.8,8.0,['POUND!'],.58,14.49,{background:'#d6bc89',foreground:'#3a302e'});
-  groundSign(world,215,145,12,4,['START'],0,.08,{background:'#dbe8a8',foreground:'#303c2a'});
+  groundSign(world,(maze.start[0]+1.5)*maze.sourceStep,(maze.start[1]+2.5)*maze.sourceStep,2.35,1.4,['START'],0,.015,{background:null,border:false,foreground:'#f7ddb0',spray:true});
   // Several facade bands and open lift shafts make the toppled towers read as
   // buildings on their sides, not upright slabs. Positions stay inside solids.
   const ribs=[],frames=[];

@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import {huntersIn} from './core.js';
 import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
-import {createWallStyles,opaqueAt} from './presentation.js';
+import {createWallStyles,opaqueAt,GRAFFITI_STYLE,GRAFFITI_WALL_HEIGHT} from './presentation.js';
 import {idlePerformance} from './runner-animation.js';
 import {mountainMaterials} from './terrain-material.js';
 import {terrainAt} from './terrain.js';
@@ -162,15 +162,17 @@ export function makeStickman(weapon=null){
     for(const side of [-1,1])mesh(new THREE.BoxGeometry(.07,.46,.52),mat(0xb6babe,{metalness:.7,roughness:.4}),hammer,side*.51,1.02,0);
     for(let i=0;i<4;i++)gripSegments.push(mesh(new THREE.CylinderGeometry(.04,.04,1,8),ink,grip));
   }
-  function poseGrip(){
+  function poseGrip(raised=0){
     if(!weapon)return;grip.rotation.set(0,0,0);grip.position.set(0,0,0);
     for(let side=0;side<2;side++){
       const shoulder=new THREE.Vector3(0,1.37,0),hand=new THREE.Vector3(0,-.07-side*.28,0).applyEuler(hammer.rotation).add(hammer.position);
       const elbow=shoulder.clone().lerp(hand,.5);elbow.x+=(side?1:-1)*.3;elbow.z+=.10;
+      // The raised salute goes around the side of his head, including the arms.
+      elbow.lerp(new THREE.Vector3(hand.x+.18,1.4,.18),raised);
       for(const [n,a,b] of [[side*2,shoulder,elbow],[side*2+1,elbow,hand]]){const v=b.clone().sub(a),m=gripSegments[n];m.position.copy(a).add(b).multiplyScalar(.5);m.scale.y=v.length();m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());}
     }
   }
-  return {root,faceCamera:STICKMAN_TUNING.faceCamera,lookAtCamera(camera,enraged){
+  return {root,faceCamera:weapon?STICKMAN_TUNING.giantFaceCamera:STICKMAN_TUNING.faceCamera,lookAtCamera(camera,enraged){
     white.color.copy(enraged?rageFace:calmFace);
     // The parent may be leaning, running, or tackling. lookAt compensates for it.
     if(this.faceCamera)head.lookAt(camera.position);else head.quaternion.identity();
@@ -194,10 +196,12 @@ export function makeStickman(weapon=null){
     smile.visible=pout.visible=horror.visible=ears.visible=flail.visible=false;grin.visible=true;
     limbs[1].visible=limbs[3].visible=false;grip.visible=true;
     const windup=THREE.MathUtils.smoothstep(t,.1,.65),swing=THREE.MathUtils.smoothstep(t,.7,.98),recover=THREE.MathUtils.smoothstep(t,1.3,2.25);
-    hammer.position.set(.35*(1-swing)*(1-recover),1.2,.2);hammer.rotation.set((-1.05*windup+3.05*swing)*(1-recover),0,0);
+    hammer.position.set(.35*(1-swing)*(1-recover)+.90*recover,1.2+1.26*recover,.2+.03*recover);
+    hammer.rotation.set((-1.05*windup+3.05*swing)*(1-recover),0,-1.45*recover);
     body.rotation.set(.11*swing*(1-recover),0,0);body.position.y=0;
-    // Both stick arms follow the shaft during the overhead wind-up and bonk.
-    poseGrip();
+    // Recover into a sideways shoulder salute, clear of his head and grin.
+    // Both stick arms follow the shaft through the wind-up, bonk and victory pose.
+    poseGrip(recover);
   },reset(){limbs.forEach(l=>{l.rotation.set(0,0,0);l.visible=true;});body.rotation.set(0,0,0);head.quaternion.identity();white.color.copy(calmFace);ears.visible=flail.visible=horror.visible=false;}};
 }
 function makeCat(kind='ginger'){
@@ -265,6 +269,7 @@ export class World{
     this.cats=[makeCat(),makeCat(),makeCat('stubby')];this.cats.forEach(c=>this.scene.add(c.root));
     this.buildFoodBowl();
     this.startMarker=this.makeMarker(maze.point(maze.startIndex),0xd4ef93,'YOU START HERE',-4);
+    if(maze.id==='pound-town'){this.startMarker.groundOnly=true;this.startMarker.ring.visible=false;}
     this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),0xf3b48b,'EXIT + STICKMAN',4);
     this.markers=[this.startMarker,this.exitMarker];
     for(const h of maze.presentation?.extraHunters||[])this.markers.push(this.makeMarker(maze.point(h.cell[1]*maze.width+h.cell[0]),0xf3b48b,'SLEDGEHAMMER GIANT',4));
@@ -313,11 +318,15 @@ export class World{
     const styleRects=style=>rectangles(maze,(c,x,y)=>c==='#'&&this.wallStyles[y*maze.width+x]===style);
     this.walls=create(styleRects(0),h.tall,h.tall/2,materials,1);
     this.lowWalls=create(styleRects(1),h.low,h.low/2,materials,1);
+    if(maze.id==='pound-town')create(styleRects(GRAFFITI_STYLE),GRAFFITI_WALL_HEIGHT,GRAFFITI_WALL_HEIGHT/2,materials);
     const windows=styleRects(2),glass=this.cutawayMaterial(new THREE.MeshStandardMaterial({color:0x9ee7dd,transparent:true,opacity:.19,roughness:.12,metalness:.15,depthWrite:false}));
     create(windows,h.sill,h.sill/2,materials);
     create(windows,h.tall-h.lintel,(h.tall+h.lintel)/2,materials);
     this.windows=create(windows,h.lintel-h.sill,(h.lintel+h.sill)/2,glass);this.windows.castShadow=false;if(maze.id==='pound-town')this.windows.visible=false;
-    for(const [i,prop] of (maze.presentation?.solidProps||[]).entries()){const material=this.cutawayMaterial(cityPropMaterial(prop));create(styleRects(i+3),prop.height,prop.height/2,material);}
+    for(const [i,prop] of (maze.presentation?.solidProps||[]).entries()){
+      if(prop.id==='hammer-handle')continue; // One round timber shaft replaces the rectangular fill.
+      const material=this.cutawayMaterial(cityPropMaterial(prop));create(styleRects(i+3),prop.height,prop.height/2,material);
+    }
     // Narrow mullions at the ends of each window make the transparent barrier legible.
     const posts=windows.flatMap(r=>r.h>r.w?[{...r,h:.18},{...r,y:r.y+r.h-.18,h:.18}]:[{...r,w:.18},{...r,x:r.x+r.w-.18,w:.18}]);
     create(posts,h.lintel-h.sill,(h.lintel+h.sill)/2,this.cutawayMaterial(mat(0x827577)));
@@ -348,14 +357,23 @@ export class World{
   buildArtwork(){
     const maze=this.maze,p=maze.presentation;this.artwork=new THREE.Group();this.graffiti=new THREE.Group();this.scene.add(this.artwork,this.graffiti);
     if(!p)return;
-    const texture=new THREE.TextureLoader().load(maze.source);texture.colorSpace=THREE.SRGBColorSpace;
+    const city=maze.id==='pound-town';
+    const texture=new THREE.TextureLoader().load(maze.source,t=>{
+      if(!city)return;
+      // Mask the original ink before mipmapping. Thresholding a reduced photo
+      // was losing the thin pen strokes in WHOAAA and GET POUNDED from the sky.
+      const c=document.createElement('canvas');c.width=t.image.width;c.height=t.image.height;const ctx=c.getContext('2d');ctx.drawImage(t.image,0,0);
+      const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;
+      for(let i=0;i<data.length;i+=4){const g=data[i+1]/255,alpha=1-THREE.MathUtils.smoothstep(g,.24,.5);data[i]=data[i+1]=data[i+2]=255;data[i+3]=Math.round(alpha*255);}
+      ctx.putImageData(pixels,0,0);t.image=c;t.needsUpdate=true;
+    });texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
     const [iw,ih]=p.sourceSize,scale=maze.cellSize/maze.sourceStep;
     const inkMaterial=tint=>new THREE.ShaderMaterial({uniforms:{photo:{value:texture},ink:{value:new THREE.Color(tint)},isSkySun:{value:0}},transparent:true,depthWrite:false,side:THREE.DoubleSide,
       vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
       fragmentShader:`uniform sampler2D photo; uniform vec3 ink; uniform float isSkySun; varying vec2 vUv;
         void main(){vec2 sourcePixel=vec2(vUv.x*1079.0,(1.0-vUv.y)*1297.0);
         if(isSkySun>0.5 && ((sourcePixel.y>355.0 && sourcePixel.x>275.0)||(sourcePixel.x>440.0 && sourcePixel.y>280.0)||sourcePixel.y>450.0))discard;
-        vec4 pixel=texture2D(photo,vUv);float alpha=1.0-smoothstep(0.055,0.15,pixel.g);if(alpha<0.06)discard;gl_FragColor=vec4(ink,alpha);
+        vec4 pixel=texture2D(photo,vUv);float alpha=${city?'pixel.a':'1.0-smoothstep(0.055,0.15,pixel.g)'};if(alpha<0.015)discard;gl_FragColor=vec4(ink,alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         }`});
@@ -370,16 +388,23 @@ export class World{
         plane.updateMatrix();plane.geometry.applyMatrix4(plane.matrix);plane.position.set(0,0,0);plane.rotation.set(0,0,0);
         const pos=plane.geometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,pos.getY(i)+maze.heightAt(pos.getX(i),pos.getZ(i)));plane.geometry.computeVertexNormals();
       }this.artwork.add(plane);
+      if(maze.id==='pound-town'){
+        // A quiet paper-colored patch preserves the handwriting over the busy city.
+        const backing=new THREE.Mesh(plane.geometry.clone(),new THREE.MeshBasicMaterial({color:0xf3dbb7,transparent:true,opacity:.94,depthWrite:false,side:THREE.DoubleSide}));
+        backing.name=`${layer.id}-backing`;backing.position.copy(plane.position);backing.position.y-=.025;backing.rotation.copy(plane.rotation);backing.renderOrder=1;plane.renderOrder=2;this.artwork.add(backing);
+      }
       // A second, upright copy makes the original pen-drawn sun visible from inside the maze.
       if(layer.id==='sun'){const skySun=cutout(layer,43,43*h/w);skySun.material.uniforms.isSkySun.value=1;skySun.position.set(-38,27,-74);skySun.rotation.y=.22;this.artwork.add(skySun);}
     }
     for(const item of p.graffiti||[]){
-      const canvas=document.createElement('canvas');canvas.width=640;canvas.height=512;const c=canvas.getContext('2d');
-      c.textAlign='center';c.textBaseline='middle';c.fillStyle=item.color;c.strokeStyle='#3e243b';c.lineWidth=7;c.font='900 72px Segoe Print, Comic Sans MS, sans-serif';
-      c.translate(320,256);c.rotate(-.055);item.lines.forEach((line,i)=>{const y=(i-(item.lines.length-1)/2)*100;c.strokeText(line,0,y);c.fillText(line,0,y);});
-      const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
-      const sign=mesh(new THREE.PlaneGeometry(1.9,1.52),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}),this.graffiti);
-      const point=maze.point(item.cell[1]*maze.width+item.cell[0]);sign.position.set(point.x+maze.cellSize/2+.025,1.75,point.z);sign.rotation.y=item.face==='east'?Math.PI/2:-Math.PI/2;sign.castShadow=false;
+      const city=maze.id==='pound-town',canvas=document.createElement('canvas');canvas.width=city?1024:640;canvas.height=512;const c=canvas.getContext('2d');
+      c.textAlign='center';c.textBaseline='middle';c.fillStyle=item.color;c.strokeStyle='#3e243b';c.lineWidth=city?4:7;c.font=`900 ${city?90:72}px 'Segoe Print','Comic Sans MS',sans-serif`;
+      c.translate(canvas.width/2,256);c.rotate(-.055);c.shadowBlur=city?4:0;c.shadowColor=item.color;
+      item.lines.forEach((line,i)=>{const y=(i-(item.lines.length-1)/2)*110;c.strokeText(line,0,y,canvas.width-80);c.fillText(line,0,y,canvas.width-80);});
+      const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
+      const sign=mesh(new THREE.PlaneGeometry(item.width||1.9,item.height||1.52),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}),this.graffiti);
+      const point=maze.point(item.cell[1]*maze.width+item.cell[0]),side=item.face==='east'?1:-1;
+      sign.position.set(point.x+side*(maze.cellSize/2+.025),maze.heightAt(point.x,point.z)+(item.centerHeight||1.75),point.z);sign.rotation.y=side*Math.PI/2;sign.castShadow=false;
     }
   }
   buildFoodBowl(){
@@ -458,7 +483,7 @@ export class World{
     const position=new THREE.Vector3(p.x+(dz*3.6-dx*1.8)*giant,ground+2.65*giant,p.z-(dx*3.6+dz*1.8)*giant),target=new THREE.Vector3(p.x,ground+1.02*giant,p.z);
     const grin=THREE.MathUtils.smoothstep(t,2,3.15),s=model.root.position;
     const close=new THREE.Vector3(s.x+(dz*2.5-dx*.85)*giant,ground+2.15*giant,s.z-(dx*2.5+dz*.85)*giant);
-    position.lerp(close,grin*.7);target.lerp(new THREE.Vector3(s.x,ground+1.55*giant,s.z),grin*.65);
+    position.lerp(close,grin*(c.weapon?.2:.7));target.lerp(new THREE.Vector3(s.x,ground+1.55*giant,s.z),grin*.65);
     model.root.rotation.y=t<1.15?Math.atan2(dx,dz):Math.atan2(position.x-s.x,position.z-s.z);
     this.cutaway.center.value.set(p.x,p.z);this.cutaway.ground.value=ground;
     return {position,target};
@@ -467,7 +492,11 @@ export class World{
     this.resize();
     const capture=!!round?.capture&&(view==='capture'||view==='result'||(view==='paused'&&round.phase==='capture'));
     this.cutaway.active.value=capture?1:0;this.graffiti.visible=!capture;
-    if(this.maze.id==='pound-town')this.artwork.children.forEach(p=>p.visible=['home','preview','transition'].includes(view)||p.name==='courtyard');
+    if(this.maze.id==='pound-town'){
+      const aerial=['home','preview','transition'].includes(view);
+      this.artwork.children.forEach(p=>p.visible=aerial||p.name==='courtyard');
+      this.wastelandMaterial.color.setScalar(aerial?.58:1);
+    }
     if(!capture&&this.wasCapture){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());}this.wasCapture=capture;
     if(round){
       if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.round=round;}
@@ -499,7 +528,7 @@ export class World{
         this.foodLabel.userData.setText(f.state==='waiting'?`STUBBY IN ${Math.ceil(f.timer)}s`:f.state==='eating'?`DINNER · ${Math.ceil(f.timer)}s`:seconds>0?`REFILL ${refill}`:'BOWL READY');
       }
     }
-    const preview=view==='preview';this.markers.forEach(m=>{m.sign.visible=view==='home'||preview;m.beam.visible=view==='home'||preview;m.ring.rotation.z=time*.6;});
+    const preview=view==='preview';this.markers.forEach(m=>{m.sign.visible=m.beam.visible=!m.groundOnly&&(view==='home'||preview);m.ring.rotation.z=time*.6;});
     let pose=this.overviewPose(preview);
     if(view==='playing'||view==='paused'||view==='result')pose=this.followPose(round);
     if(capture)pose=this.capturePose(round);
@@ -513,7 +542,7 @@ export class World{
     this.camera.position.lerp(pose.position,Math.min(1,speed));this.look.lerp(pose.target,Math.min(1,speed));
     this.camera.up.set(0,1,0);this.camera.lookAt(this.look);
     if(round)[this.stickman,...this.extraStickmen].forEach(m=>m.lookAtCamera(this.camera,isStickmanEnraged(round)));
-    this.scene.fog.density=['playing','paused','result','capture'].includes(view)?.009:.002;
+    this.scene.fog.density=['playing','paused','result','capture'].includes(view)?(this.maze.id==='pound-town'?.0055:.009):.002;
     for(const e of this.effects){e.life-=dt;e.root.children.forEach(c=>c.position.addScaledVector(c.userData.velocity,dt));e.root.scale.setScalar(Math.max(.01,e.life));if(e.life<=0){this.scene.remove(e.root);e.root.children.forEach(c=>c.geometry.dispose());e.root.children[0]?.material.dispose();}}
     this.effects=this.effects.filter(e=>e.life>0);if(this.sparks)this.sparks.rotation.y=time*.002;
     this.weather?.update(round,dt,view,this.reducedMotion.matches);

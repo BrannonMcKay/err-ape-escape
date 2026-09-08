@@ -9,15 +9,26 @@
   "windowRegions":[[129,87,8,25],[197,95,9,37],[160,133,15,26],[50,168,7,26],[345,182,11,23],[370,279,32,6],[86,132,6,25],[269,34,8,35]],
   "solidProps":[
     {"id":"hammer-head","height":14.4,"color":"#687484","polygon":[[687,448],[800,364],[844,391],[976,661],[985,708],[874,745],[823,669],[788,595]]},
-    {"id":"hammer-handle","height":3.0,"color":"#8e5838","polygon":[[386,767],[750,552],[779,603],[417,823]]},
+    {"id":"hammer-handle","height":7.4,"color":"#8e5838","polygon":[[386,767],[750,552],[779,603],[417,823]]},
     {"id":"tower","height":16.8,"color":"#9c8478","polygon":[[1105,306],[1266,305],[1271,840],[1110,840]]},
     {"id":"fallen-building","height":7.8,"color":"#b69f87","polygon":[[815,742],[978,638],[1094,470],[1115,473],[1120,840],[814,840]]}
   ],
   "artLayers":[
-    {"id":"invitation","crop":[52,61,425,122],"color":"#382c38"},
-    {"id":"whoa","crop":[582,25,192,100],"color":"#382c38"},
-    {"id":"courtyard","crop":[837,250,197,82],"color":"#75312c"},
-    {"id":"escape","crop":[132,877,283,112],"color":"#382c38"}
+    {"id":"invitation","crop":[52,61,425,122],"color":"#30242f"},
+    {"id":"whoa","crop":[582,25,192,100],"color":"#30242f"},
+    {"id":"courtyard","crop":[837,250,197,82],"color":"#30242f"},
+    {"id":"escape","crop":[132,877,283,112],"color":"#30242f"}
   ],
-  "graffiti":[]
+  "graffiti":[
+    {"cell":[137,102],"face":"west","lines":["For a good time,","call yer mom!"],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[180,76],"face":"west","lines":["My other wall","is a Banksy."],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[89,141],"face":"west","lines":["We are NPCs"],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[50,102],"face":"east","lines":["For a good time,","lower your","expectations."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[267,60],"face":"west","lines":["Your a Looser"],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[346,160],"face":"east","lines":["REALITY IS UNDER","RENOVATION."],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[421,220],"face":"east","lines":["THIS WALL HAS","TRUST ISSUES."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[300,299],"face":"east","lines":["EXIT LEFT.","EMOTIONALLY."],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[326,290],"face":"west","lines":["I WAS PROMISED","A CHARACTER ARC."],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[295,60],"face":"west","lines":["Christel da","Pistol!"],"color":"#ef9abd","width":3.8,"height":1.85,"centerHeight":1.5}
+  ]
 }

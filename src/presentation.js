@@ -1,4 +1,5 @@
 import {propAt} from './elevation.js';
+export const GRAFFITI_STYLE=32, GRAFFITI_WALL_HEIGHT=2.8;
 // Appearance is independent of navigation: low stone and glass remain solid obstacles.
 const inRegion=(x,y,[rx,ry,w,h])=>x>=rx&&y>=ry&&x<rx+w&&y<ry+h;
 export function createWallStyles(maze){
@@ -8,7 +9,9 @@ export function createWallStyles(maze){
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     if(rows[y][x]!=='#')continue;
     if(maze.id==='pound-town'){
-      const prop=propAt(maze,x,y);styles[y*w+x]=prop>=0?3+prop:p.windowRegions?.some(r=>inRegion(x,y,r))?2:1;continue;
+      const prop=propAt(maze,x,y);
+      const paintedWall=p.graffiti?.some(g=>x===g.cell[0]&&Math.abs(y-g.cell[1])<=7);
+      styles[y*w+x]=prop>=0?3+prop:paintedWall?GRAFFITI_STYLE:p.windowRegions?.some(r=>inRegion(x,y,r))?2:1;continue;
     }
     const thin=(passage(x,y,-1,0)&&passage(x,y,1,0))||(passage(x,y,0,-1)&&passage(x,y,0,1));
     if(!thin)continue;
@@ -24,6 +27,7 @@ export function opaqueAt(maze,styles,x,y,z){
   if(maze.rows[Math.floor(i/maze.width)][i%maze.width]===' ')return false;
   const heights=maze.presentation?.wallHeights||{tall:3.4,low:1.05,sill:.65,lintel:2.75};
   y-=maze.heightAt?.(x,z)||0;
+  if(styles[i]===GRAFFITI_STYLE)return y<=GRAFFITI_WALL_HEIGHT;
   if(styles[i]>=3)return y<=maze.presentation.solidProps[styles[i]-3].height;
   if(styles[i]===1)return y<=heights.low;
   if(styles[i]===2)return y<=heights.sill||(y>=heights.lintel&&y<=heights.tall);

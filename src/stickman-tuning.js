@@ -1,6 +1,7 @@
 // Set faceCamera to false to restore the original body-facing head.
 export const STICKMAN_TUNING=Object.freeze({
   faceCamera:true,
+  giantFaceCamera:false,
   rageAt:210,
   rageSpeedMultiplier:1.25,
   calmFace:0xfff8e8,
