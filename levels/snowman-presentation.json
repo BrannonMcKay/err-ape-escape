@@ -1,0 +1,19 @@
+{
+  "sourceSize": [370, 411],
+  "hunter": {"scale":2,"speedMultiplier":1.5},
+  "theme": {
+    "id": "snowman-winter",
+    "snowballs": [[0.37, 0.315, 0.112, 0.09], [0.366, 0.496, 0.169, 0.138], [0.374, 0.727, 0.292, 0.204]],
+    "colors": {"sky":"#a7c9df", "fog":"#c4dce9", "snow":"#edf6fa", "ice":"#398cbb", "stone":"#738ca2", "trees":"#284b49"},
+    "treeRegions": [[66,159,33,61], [169,170,34,57], [35,258,38,69], [195,286,45,48], [127,289,36,37]],
+    "footprintSeconds": 18
+  },
+  "wallHeights": {"tall":2.85,"low":0.95,"sill":0.5,"lintel":2.3},
+  "lowWallRegions": [[20,85,269,302]],
+  "windowRegions": [[100,137,14,21],[194,236,16,25],[82,298,20,20]],
+  "artLayers": [
+    {"id":"exit", "crop":[281,182,57,65], "color":"#314a60"},
+    {"id":"flourish", "crop":[271,240,76,43], "color":"#365d76"}
+  ],
+  "graffiti": []
+}

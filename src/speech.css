@@ -1,0 +1,5 @@
+.character-speech{position:fixed;z-index:9;max-width:230px;width:max-content;padding:11px 15px;background:#fff3d7;color:#292435;border:2px solid #292435;border-radius:18px;box-shadow:3px 4px 0 #29243566;font:700 15px/1.28 'Segoe UI',sans-serif;text-align:center;pointer-events:none;transform:translate(-50%,-100%)}
+.character-speech::after{content:'';position:absolute;left:var(--tail-left,calc(50% - 7px));bottom:-8px;width:12px;height:12px;transform:rotate(45deg);background:inherit;border-right:2px solid #292435;border-bottom:2px solid #292435}
+.character-speech.runner-speech{background:#f8cfe2}
+.character-speech[hidden]{display:none!important}
+@media(max-width:600px){.character-speech{font-size:13px;max-width:190px;padding:9px 12px}}
