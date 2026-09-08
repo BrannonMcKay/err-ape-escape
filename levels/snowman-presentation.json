@@ -1,6 +1,6 @@
 {
   "sourceSize": [370, 411],
-  "hunter": {"scale":2,"speedMultiplier":1.5},
+  "hunter": {"scale":1.5,"speedMultiplier":1.5},
   "theme": {
     "id": "snowman-winter",
     "snowballs": [[0.37, 0.315, 0.112, 0.09], [0.366, 0.496, 0.169, 0.138], [0.374, 0.727, 0.292, 0.204]],
