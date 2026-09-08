@@ -22,7 +22,6 @@ export function buildWasteland(world,groundMaterial){
   bucket('debris',new THREE.DodecahedronGeometry(.65),mat(0xffffff));
   bucket('concrete',new THREE.BoxGeometry(),mat(0x897e70));
   bucket('slabs',new THREE.BoxGeometry(),mat(0x9c9181));
-  bucket('markings',new THREE.BoxGeometry(),mat(0xb4a67b));
   const v=new THREE.Vector3(),q=new THREE.Quaternion(),e=new THREE.Euler(),scale=new THREE.Vector3(),local=new THREE.Matrix4();
   function part(name,root,x,y,z,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0,color=null){
     q.setFromEuler(e.set(rx,ry,rz));local.compose(v.set(x,y,z),q,scale.set(sx,sy,sz));
@@ -75,30 +74,31 @@ export function buildWasteland(world,groundMaterial){
     part('charcoal',root,-.31,.853,1.6,.5,.012,.24,0,.17,0);
     for(let j=0;j<4;j++)part('debris',identity,x+(random()-.5)*7,CITY_GROUND_Y+.14,z+(random()-.5)*6,.25+random()*.45,.2,.25+random()*.45,random(),random()*6,random(),0x80776a);
   }
-  // Broken curb islands, concrete slabs and faded parking lines beneath the city.
+  // Broken floor slabs beneath the city, without the former parallel road grid.
   for(let i=0;i<340;i++){
     const x=(random()-.5)*390,z=(random()-.5)*360;if(!outside(x,z,2))continue;
     const large=i%5===0;
     part('slabs',identity,x,CITY_GROUND_Y+.14,z,large?3.5:.8,.25,large?2.4:.7,.02,random()*6,.02);
-    if(i%4===0)for(let j=0;j<4;j++)part('markings',identity,x+j*2.8,CITY_GROUND_Y+.025,z,.11,.018,4.1);
   }
   // Grounded columns and exposed floor remnants give the high maze a ruined
   // building underneath it. The props all remain below the playable surface.
   for(let x=-76;x<77;x+=7)for(let z=-59;z<62;z+=7){
     const i=maze.index(x,z);if(i<0||maze.rows[Math.floor(i/maze.width)][i%maze.width]===' ')continue;
-    const ceiling=maze.heightAt(x,z)-3.1,height=ceiling-CITY_GROUND_Y;
+    const lowAt=radius=>Math.min(...[-radius,radius].flatMap(dx=>[-radius,radius].map(dz=>maze.heightAt(x+dx,z+dz))));
+    const ceiling=lowAt(.4)-3.1,height=ceiling-CITY_GROUND_Y;
     if(height<1)continue;
     part('concrete',identity,x,CITY_GROUND_Y+height/2,z,.78,height,.78);
     part('slabs',identity,x,CITY_GROUND_Y+.22,z,1.9,.44,1.9);
-    for(let level=CITY_GROUND_Y+5;level<ceiling-1;level+=5){
+    const slabCeiling=lowAt(2.8)-3.4;
+    for(let level=CITY_GROUND_Y+5;level<Math.min(ceiling-1,slabCeiling);level+=5){
       part('slabs',identity,x,level,z,5.5,.28,5.5);
-      if((i%5)===0)part('concrete',identity,x-2.2,level+1,z,.30,2,2.7);
+      if((i%5)===0&&level+2<slabCeiling)part('concrete',identity,x-2.2,level+1,z,.30,2,2.7);
     }
   }
   for(const [name,b] of Object.entries(buckets)){
     const mesh=new THREE.InstancedMesh(b.geometry,b.material,b.items.length);
     b.items.forEach((p,i)=>{mesh.setMatrixAt(i,p.matrix);if(p.color!==null)mesh.setColorAt(i,new THREE.Color(p.color));});
-    mesh.castShadow=name!=='markings';mesh.receiveShadow=true;mesh.name=`Wasteland ${name}`;scene.add(mesh);
+    mesh.castShadow=true;mesh.receiveShadow=true;mesh.name=`Wasteland ${name}`;scene.add(mesh);
   }
 }
 

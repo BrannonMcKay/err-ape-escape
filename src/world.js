@@ -1,6 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import {huntersIn} from './core.js';
 import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
+import {terrainBoxes} from './terrain-geometry.js';
 import {createWallStyles,opaqueAt,GRAFFITI_STYLE,GRAFFITI_WALL_HEIGHT} from './presentation.js';
 import {idlePerformance} from './runner-animation.js';
 import {mountainMaterials} from './terrain-material.js';
@@ -307,6 +308,10 @@ export class World{
   buildMaze(){
     const maze=this.maze,s=maze.cellSize;
     const create=(rects,height,y,materials,variation=0)=>{
+      if(maze.slope.nonlinear){
+        for(const material of Array.isArray(materials)?materials:[materials])material.vertexColors=true;
+        const mesh=new THREE.Mesh(terrainBoxes(maze,rects,height,y,variation),materials);mesh.castShadow=height>1;mesh.receiveShadow=true;this.scene.add(mesh);return mesh;
+      }
       const geo=new THREE.BoxGeometry(1,1,1),batch=new THREE.InstancedMesh(geo,materials,rects.length),m=new THREE.Matrix4(),q=new THREE.Quaternion();
       rects.forEach((r,i)=>{m.compose(new THREE.Vector3((r.x+r.w/2-maze.width/2)*s,y,(r.y+r.h/2-maze.height/2)*s),q,new THREE.Vector3(r.w*s,height,r.h*s));m.elements[1]=maze.slope.x*r.w*s;m.elements[9]=maze.slope.z*r.h*s;m.elements[13]+=maze.heightAt(m.elements[12],m.elements[14]);batch.setMatrixAt(i,m);if(variation)batch.setColorAt(i,new THREE.Color().setScalar(.91+((r.x*13+r.y*7)%19)/100));});
       batch.castShadow=height>1;batch.receiveShadow=true;this.scene.add(batch);return batch;
@@ -378,13 +383,13 @@ export class World{
         #include <colorspace_fragment>
         }`});
     const cutout=(layer,width,height)=>{
-      const [x,y,w,h]=layer.crop,geometry=new THREE.PlaneGeometry(width,height),uv=geometry.attributes.uv;
+      const [x,y,w,h]=layer.crop,geometry=new THREE.PlaneGeometry(width,height,maze.slope.nonlinear?Math.ceil(width/.36):1,maze.slope.nonlinear?Math.ceil(height/.36):1),uv=geometry.attributes.uv;
       for(let i=0;i<uv.count;i++)uv.setXY(i,(x+uv.getX(i)*w)/iw,1-(y+(1-uv.getY(i))*h)/ih);
       return new THREE.Mesh(geometry,inkMaterial(layer.color));
     };
     for(const layer of p.artLayers||[]){
       const [x,y,w,h]=layer.crop,plane=cutout(layer,w*scale,h*scale);plane.name=layer.id;
-      plane.rotation.x=-Math.PI/2;plane.position.set((x+w/2)/maze.sourceStep*maze.cellSize-maze.width*maze.cellSize/2,.01,(y+h/2)/maze.sourceStep*maze.cellSize-maze.height*maze.cellSize/2);if(maze.slope.x||maze.slope.z){
+      plane.rotation.x=-Math.PI/2;plane.position.set((x+w/2)/maze.sourceStep*maze.cellSize-maze.width*maze.cellSize/2,.01,(y+h/2)/maze.sourceStep*maze.cellSize-maze.height*maze.cellSize/2);if(maze.slope.x||maze.slope.z||maze.slope.nonlinear){
         plane.updateMatrix();plane.geometry.applyMatrix4(plane.matrix);plane.position.set(0,0,0);plane.rotation.set(0,0,0);
         const pos=plane.geometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,pos.getY(i)+maze.heightAt(pos.getX(i),pos.getZ(i)));plane.geometry.computeVertexNormals();
       }this.artwork.add(plane);
@@ -402,9 +407,10 @@ export class World{
       c.translate(canvas.width/2,256);c.rotate(-.055);c.shadowBlur=city?4:0;c.shadowColor=item.color;
       item.lines.forEach((line,i)=>{const y=(i-(item.lines.length-1)/2)*110;c.strokeText(line,0,y,canvas.width-80);c.fillText(line,0,y,canvas.width-80);});
       const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
-      const sign=mesh(new THREE.PlaneGeometry(item.width||1.9,item.height||1.52),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}),this.graffiti);
+      const sign=mesh(new THREE.PlaneGeometry(item.width||1.9,item.height||1.52,city?24:1,1),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}),this.graffiti);
       const point=maze.point(item.cell[1]*maze.width+item.cell[0]),side=item.face==='east'?1:-1;
       sign.position.set(point.x+side*(maze.cellSize/2+.025),maze.heightAt(point.x,point.z)+(item.centerHeight||1.75),point.z);sign.rotation.y=side*Math.PI/2;sign.castShadow=false;
+      if(maze.slope.nonlinear){const pos=sign.geometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,pos.getY(i)+maze.heightAt(sign.position.x,point.z-side*pos.getX(i))-maze.heightAt(point.x,point.z));sign.geometry.computeVertexNormals();}
     }
   }
   buildFoodBowl(){
@@ -439,8 +445,9 @@ export class World{
     const p=round.player,a=p.angle,ground=this.maze.heightAt(p.x,p.z);
     const target=new THREE.Vector3(p.x,ground+1.18,p.z),back=new THREE.Vector3(Math.sin(a),0,Math.cos(a));
     // Shorten the camera boom at walls. Camera stays below the tall maze walls.
-    let dist=2.5;for(let d=.2;d<=2.5;d+=.1){if(opaqueAt(this.maze,this.wallStyles,p.x-back.x*d,ground+2.2,p.z-back.z*d)){dist=Math.max(.22,d-.18);break;}}
-    const pos=new THREE.Vector3(p.x-back.x*dist,ground+2.20+(2.5-dist)*.12,p.z-back.z*dist);
+    const cameraY=d=>Math.max(ground+2.2,this.maze.heightAt(p.x-back.x*d,p.z-back.z*d)+1.5);
+    let dist=2.5;for(let d=.2;d<=2.5;d+=.1){if(opaqueAt(this.maze,this.wallStyles,p.x-back.x*d,cameraY(d),p.z-back.z*d)){dist=Math.max(.22,d-.18);break;}}
+    const pos=new THREE.Vector3(p.x-back.x*dist,cameraY(dist)+(2.5-dist)*.12,p.z-back.z*dist);
     target.addScaledVector(back,2.2);return {position:pos,target};
   }
   actorInView(actor,height=1.85){

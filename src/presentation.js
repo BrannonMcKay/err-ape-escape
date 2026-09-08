@@ -23,8 +23,9 @@ export function createWallStyles(maze){
 }
 export function opaqueAt(maze,styles,x,y,z){
   const i=maze.index(x,z);if(i<0)return true;
-  if(maze.walk[i])return false;
   if(maze.rows[Math.floor(i/maze.width)][i%maze.width]===' ')return false;
+  if(y<(maze.heightAt?.(x,z)||0)-.08)return true;
+  if(maze.walk[i])return false;
   const heights=maze.presentation?.wallHeights||{tall:3.4,low:1.05,sill:.65,lintel:2.75};
   y-=maze.heightAt?.(x,z)||0;
   if(styles[i]===GRAFFITI_STYLE)return y<=GRAFFITI_WALL_HEIGHT;

@@ -1,6 +1,6 @@
 {
   "sourceSize":[1348,1024],
-  "elevation":{"drop":24,"direction":[0.4,0.6],"offset":2},
+  "elevation":{"profile":"plateau-descent","upperHeight":12,"drop":17,"lowerGrade":0.025,"upperBoundary":[[-700,840],[-380,890],[-260,990],[0,1010],[220,1020],[460,980],[700,880],[1100,880]],"lowerBoundary":[[-700,1170],[-360,1174],[-180,1199],[120,1215],[310,1123],[450,1165],[620,1242],[760,1396],[1100,1550]]},
   "hunter":{"scale":1,"speedMultiplier":1},
   "extraHunters":[{"id":"giant","name":"The Demolition Man","cell":[309,121],"scale":2,"speedMultiplier":0.3333333333333333,"weapon":"sledgehammer"}],
   "theme":{"id":"pound-town-ruins","colors":{"sky":"#b77982","fog":"#c69383"}},
@@ -23,10 +23,10 @@
     {"cell":[137,102],"face":"west","lines":["For a good time,","call yer mom!"],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[180,76],"face":"west","lines":["My other wall","is a Banksy."],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[89,141],"face":"west","lines":["We are NPCs"],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
-    {"cell":[50,102],"face":"east","lines":["For a good time,","lower your","expectations."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[50,102],"face":"east","lines":["Christel,","da Pistol","wuz here."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[267,60],"face":"west","lines":["Your a Looser"],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[346,160],"face":"east","lines":["REALITY IS UNDER","RENOVATION."],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
-    {"cell":[421,220],"face":"east","lines":["THIS WALL HAS","TRUST ISSUES."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
+    {"cell":[421,220],"face":"east","lines":["INSERT","PENIS JOKE."],"color":"#f2d68b","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[300,299],"face":"east","lines":["EXIT LEFT.","EMOTIONALLY."],"color":"#94d0c6","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[326,290],"face":"west","lines":["I WAS PROMISED","A CHARACTER ARC."],"color":"#e8b4cb","width":3.8,"height":1.85,"centerHeight":1.5},
     {"cell":[295,60],"face":"west","lines":["Christel da","Pistol!"],"color":"#ef9abd","width":3.8,"height":1.85,"centerHeight":1.5}

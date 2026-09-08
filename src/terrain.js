@@ -10,7 +10,10 @@ export function mountainWeights(u,v,theme){
 }
 export function terrainAt(maze,x,z){
   const theme=maze.presentation?.theme;
-  if(theme?.id==='pound-town-ruins')return {name:maze.heightAt(x,z)>5?'Upper town · cracked streets':maze.heightAt(x,z)>0?'Demolition district':'Downtown · fallen towers',snow:0,green:0,autumn:0};
+  if(theme?.id==='pound-town-ruins'){
+    const progress=maze.slope.progressAt?.(x,z);
+    return {name:progress===0?'Upper offices · shattered tiles':progress<1?'Collapsed floor · steep descent':'Downtown · fallen towers',snow:0,green:0,autumn:0};
+  }
   if(theme?.id==='snowman-winter')return winterWeights(x/(maze.width*maze.cellSize)+.5,z/(maze.height*maze.cellSize)+.5,theme);
   if(theme?.id!=='mountain-seasons')return {name:maze.name,snow:0,green:0,autumn:0};
   const w=mountainWeights(x/(maze.width*maze.cellSize)+.5,z/(maze.height*maze.cellSize)+.5,theme);

@@ -22,21 +22,23 @@ function textured(kind,color=0xffffff){
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>\nvarying vec3 vCity;\n${noise}`).replace('#include <color_fragment>',`#include <color_fragment>
       vec3 pn=abs(normalize(cross(dFdx(vCity),dFdy(vCity))));
       vec2 uv=pn.y>.5?vCity.xz:pn.x>.5?vCity.zy:vCity.xy;
+      ${kind==='ground'?'uv=vCity.xz;':''}
       float n=cityNoise(uv*2.0),grain=cityHash(floor(uv*75.0));
       ${kind==='ground'?`
-        vec2 tile=fract(uv/2.4);float seams=1.0-smoothstep(.012,.027,min(min(tile.x,1.0-tile.x),min(tile.y,1.0-tile.y)));
-        float road=1.0-smoothstep(2.7,3.3,abs(mod(uv.x+uv.y*.54+120.0,19.0)-9.5));
-        float earth=smoothstep(.53,.69,cityNoise(uv*.19));
-        float grass=smoothstep(.67,.83,cityNoise(uv*.48))*earth;
-        vec3 concrete=mix(vec3(.51,.46,.40),vec3(.25,.24,.24),seams*.7);
-        vec3 asphalt=vec3(.18,.185,.195);
-        vec3 dirt=mix(vec3(.32,.22,.135),vec3(.21,.29,.115),grass);
-        vec3 surface=mix(mix(concrete,asphalt,road),dirt,earth);
-        float crack=cityCrack(uv*.65)*smoothstep(.28,.62,cityNoise(uv*.4));
-        surface*=1.0-crack*.7;
-        float stripe=(1.0-smoothstep(.075,.15,abs(mod(uv.x+uv.y*.54+120.0,19.0)-9.5)))*step(.38,fract(uv.y*.2));
-        surface=mix(surface,vec3(.69,.49,.20),stripe*(1.0-earth)*.55);
-        diffuseColor.rgb*=surface*(.86+grain*.15+n*.15);
+        vec2 grid=uv/.82,id=floor(grid),tile=fract(grid);float seed=cityHash(id);
+        float edge=min(min(tile.x,1.0-tile.x),min(tile.y,1.0-tile.y));
+        float grout=1.0-smoothstep(.018,.035,edge);
+        float missing=step(.59,cityNoise(id*.17)+seed*.23);
+        float chipped=(1.0-smoothstep(.055,.15,length(tile-vec2(step(.5,seed),step(.5,cityHash(id+17.0))))))*step(.35,seed);
+        vec3 concrete=mix(vec3(.32,.33,.32),vec3(.46,.44,.40),cityNoise(uv*.6));
+        vec3 ceramic=mix(vec3(.66,.65,.59),vec3(.43,.51,.50),step(.82,seed));
+        ceramic*=.86+seed*.15;
+        vec3 surface=mix(ceramic,concrete,max(missing,max(grout,chipped)));
+        float crack=cityCrack(uv*1.15)*smoothstep(.40,.63,cityNoise(uv*.8));
+        surface*=1.0-crack*.56;
+        float dust=smoothstep(.63,.82,cityNoise(uv*.35));
+        surface=mix(surface,vec3(.46,.37,.28),dust*.35);
+        diffuseColor.rgb*=surface*(.87+grain*.13+n*.10);
       `:kind==='facade'?`
         vec2 cell=fract(uv/vec2(2.2,3.4));float frame=step(.17,cell.x)*step(cell.x,.83)*step(.16,cell.y)*step(cell.y,.77);
         float broken=step(.23,cityHash(floor(uv/vec2(2.2,3.4))));
@@ -76,7 +78,7 @@ function signTexture(lines,{background='#e1bc74',foreground='#33292c',border=tru
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;return texture;
 }
 function groundSign(world,px,py,width,height,lines,angle=0,lift=.06,style={}){
-  const maze=world.maze,p=sourcePoint(maze,px,py),geo=new THREE.PlaneGeometry(width,height);geo.rotateX(-Math.PI/2);geo.rotateY(angle);
+  const maze=world.maze,p=sourcePoint(maze,px,py),geo=new THREE.PlaneGeometry(width,height,Math.ceil(width/.36),Math.ceil(height/.36));geo.rotateX(-Math.PI/2);geo.rotateY(angle);
   const positions=geo.attributes.position;
   for(let i=0;i<positions.count;i++){const x=positions.getX(i)+p.x,z=positions.getZ(i)+p.z;positions.setXYZ(i,x,maze.heightAt(x,z)+lift,z);}geo.computeVertexNormals();
   const sign=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:signTexture(lines,style),transparent:true,roughness:.8,polygonOffset:true,polygonOffsetFactor:-2}));sign.receiveShadow=true;world.scene.add(sign);return sign;
@@ -140,7 +142,7 @@ export function buildCityDecor(world){
     batch(scene,new THREE.BoxGeometry(),textured('facade',layer?0x806d7a:0x786569),ruins).castShadow=false;
     batch(scene,new THREE.BoxGeometry(),material(layer?0x6f5d6b:0x483f49),ledges).castShadow=false;
   }
-  const chunks=[],bricks=[],rebar=[],plants=[],flowers=[];
+  const chunks=[],bricks=[],rebar=[],plants=[],flowers=[],tiles=[];
   for(let i=0;i<maze.walk.length;i++){
     const row=Math.floor(i/maze.width),col=i%maze.width,p=maze.point(i),y=maze.heightAt(p.x,p.z);
     if(maze.rows[row][col]==='#'&&world.wallStyles[i]===1&&i%3===0){
@@ -149,6 +151,7 @@ export function buildCityDecor(world){
       if(i%15===0)bricks.push({...p,y:y+.3,sx:.36,sy:.3,sz:.27,ry:random()*.7,color:0x9f604b});
     }
     if(world.wallStyles[i]===2&&i%14===0)rebar.push({...p,y:y+7.9,sx:.023,sy:.7+random()*.8,sz:.023,rz:(random()-.5)*.5});
+    if(maze.walk[i]&&i%173===0)tiles.push({...p,y:y+.045,sx:.12+random()*.18,sy:1,sz:.12+random()*.20,ry:random()*6,rz:(random()-.5)*.12,color:random()>.3?0xd0cbb9:0x829996});
     if(maze.walk[i]&&i%47===0){
       // Keep plants near the edges of corridors. They do not obstruct navigation.
       const edge=[i-1,i+1,i-maze.width,i+maze.width].some(n=>!maze.walk[n]);
@@ -162,6 +165,7 @@ export function buildCityDecor(world){
   batch(scene,new THREE.BoxGeometry(),world.cutawayMaterial(material(0x4c3d35,{metalness:.5})),rebar);
   batch(scene,new THREE.ConeGeometry(.6,1,4),material(0xffffff,{side:THREE.DoubleSide}),plants).castShadow=false;
   batch(scene,new THREE.IcosahedronGeometry(1,0),material(0xffffff),flowers).castShadow=false;
+  batch(scene,new THREE.CylinderGeometry(1,1,.025,3),material(0xffffff),tiles).castShadow=false;
 
   // The hammer lies in the original silhouette; its square-section head rises
   // fourteen metres. Its lettering stays on the upper face, readable from above.
