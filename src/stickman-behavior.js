@@ -1,4 +1,5 @@
-import {canOccupy,lineClear,moveWithCollision,startPanic,RULES} from './core.js';
+import {canOccupy,lineClear,moveWithCollision,startPanic,huntersIn,RULES} from './core.js';
+import {stickmanSpeedMultiplier} from './stickman-tuning.js';
 
 export const TAUNTS = Object.freeze([
   "Would you like a churro?",
@@ -32,40 +33,43 @@ export function winGloat(random=Math.random){return WIN_GLOATS[Math.min(WIN_GLOA
 
 export function say(actor,text,seconds=6.5){actor.speech={text,remaining:seconds};}
 export const CAT_BLOCKED_LINE='Damn it! This stick is blocked again by a cute kitty.';
-export function tickCatComplaint(round,dt){
+export function tickCatComplaint(round,dt,h=round.hunter){
   if(round.phase!=='playing')return false;
-  const h=round.hunter,b=round.catComplaint||={blocked:0,clear:0,armed:true,cooldown:0};
+  const owner=h===round.hunter?round:h,b=owner.catComplaint||={blocked:0,clear:0,armed:true,cooldown:0};
   b.cooldown=Math.max(0,b.cooldown-dt);
   if(!h.catBlocked){b.blocked=0;b.clear+=dt;if(b.clear>=1)b.armed=true;return false;}
   b.clear=0;b.blocked+=dt;
   if(b.blocked<.35||!b.armed||b.cooldown>0||h.panic||h.speech)return false;
   say(h,CAT_BLOCKED_LINE,6.5);b.armed=false;b.cooldown=12;return true;
 }
-export function periodRetort(round){
+export function periodRetort(round,h=round.hunter){
   say(round.player,"I'm on my period!",5);
-  say(round.hunter,'Damn it!!! Not again!',5);
+  say(h,'Damn it!!! Not again!',5);
 }
 export function scream(round,maze){
   if(round.phase!=='playing'||round.screamCooldown>0)return false;
   round.screamCooldown=RULES.screamCooldown;say(round.player,'AAAAAAH!',1.6);
-  const p=round.player,h=round.hunter;
-  if(Math.hypot(p.x-h.x,p.z-h.z)>=8||!lineClear(maze,p,h))return false;
-  startPanic(round,'scream');say(h,'MY TINY EARS!!!',RULES.screamDuration);return true;
+  const p=round.player;let effective=false;
+  for(const h of huntersIn(round)){
+    if(Math.hypot(p.x-h.x,p.z-h.z)>=8||!lineClear(maze,p,h))continue;
+    startPanic(round,'scream',h);say(h,'MY TINY EARS!!!',RULES.screamDuration);effective=true;
+  }
+  return effective;
 }
 
 // A new sighting must last briefly; corners and transparent walls cannot spam taunts.
-export function tickBanter(round,dt,visible,random=Math.random){
+export function tickBanter(round,dt,visible,random=Math.random,h=round.hunter){
   if(round.phase!=='playing')return;
   dt=Math.max(0,dt);
-  for(const actor of [round.player,round.hunter])if(actor.speech){actor.speech.remaining-=dt;if(actor.speech.remaining<=0)actor.speech=null;}
-  const b=round.banter ||= {seen:0,hidden:1,armed:true,cooldown:0,previous:-1};
+  for(const actor of h===round.hunter?[round.player,h]:[h])if(actor.speech){actor.speech.remaining-=dt;if(actor.speech.remaining<=0)actor.speech=null;}
+  const owner=h===round.hunter?round:h,b=owner.banter ||= {seen:0,hidden:1,armed:true,cooldown:0,previous:-1};
   b.cooldown=Math.max(0,b.cooldown-dt);
   if(!visible){b.seen=0;b.hidden+=dt;if(b.hidden>=.8)b.armed=true;return;}
   b.hidden=0;b.seen+=dt;
-  if(b.seen<.15||!b.armed||b.cooldown>0||round.hunter.panic||round.hunter.speech)return;
+  if(b.seen<.15||!b.armed||b.cooldown>0||h.panic||h.speech)return;
   const options=TAUNTS.map((_,i)=>i).filter(i=>i!==b.previous);
   const index=options[Math.min(options.length-1,Math.floor(Math.max(0,random())*options.length))];
-  say(round.hunter,TAUNTS[index]);b.previous=index;b.armed=false;b.cooldown=12;
+  say(h,TAUNTS[index]);b.previous=index;b.armed=false;b.cooldown=12;
   return TAUNTS[index];
 }
 
@@ -85,13 +89,13 @@ function animalBlocks(round,maze,point){
 }
 
 // Fast, cell-by-cell panic movement: random turns for screams, increasing maze distance for retreats.
-export function tickPanic(round,maze,dt,random=Math.random){
-  const h=round.hunter,panic=h.panic;
+export function tickPanic(round,maze,dt,random=Math.random,h=round.hunter){
+  const panic=h.panic;
   if(round.phase!=='playing'||!panic||h.stunned<=0)return false;
   const step=Math.min(Math.max(0,dt),h.stunned),before=panic.elapsed;
   h.stunned=Math.max(0,h.stunned-step);panic.elapsed+=step;panic.turnTimer=Math.max(0,panic.turnTimer-step);h.moving=false;h.catBlocked=false;
   const retreat=panic.kind==='period',startle=retreat?.65:.2;
-  let budget=Math.max(0,panic.elapsed-Math.max(before,startle))*(retreat?8.6:7.2)*(h.speedMultiplier||1);
+  let budget=Math.max(0,panic.elapsed-Math.max(before,startle))*(retreat?8.6:7.2)*(h.speedMultiplier||1)*stickmanSpeedMultiplier(round);
   if(retreat&&(!panic.distances||panic.elapsed>=panic.nextDistances)){
     panic.distances=distances(maze,maze.index(round.player.x,round.player.z));panic.nextDistances=panic.elapsed+.7;
   }

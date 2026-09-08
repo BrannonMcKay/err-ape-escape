@@ -14,9 +14,10 @@
   <main id="app" class="home-mode">
     <aside id="sidebar" class="sidebar">
       <div class="intro"><div class="eyebrow">CHRISTEL’S DRAWINGS. YOUR ESCAPE.</div><h1>Wrong turn.<br><em>Good luck.</em></h1><p>Find the exit. Outsmart Stickman.<br>Make friends with a cat.</p></div>
-      <div class="section-label"><span>CHOOSE YOUR MAZE</span><span id="level-count">01 / 02</span></div>
+      <div class="section-label"><span>CHOOSE YOUR MAZE</span><span id="level-count">01 / 03</span></div>
       <button class="level-card selected" id="mountains-card" data-level="mountains" aria-pressed="true"><span class="art-thumb mountains-thumb"><img src="assets/mountains.jpg" alt="Christel’s hand-drawn Mountains maze"></span><span class="level-copy"><small>01 · ROCKY RIDGELINES</small><strong>The Mountains</strong><span><i class="status-dot"></i> Ready to run</span></span><b class="level-arrow">↗</b></button>
       <button class="level-card" id="snowman-card" data-level="snowman" aria-pressed="false"><span class="art-thumb"><img src="assets/snowman.jpg" alt="Christel’s hand-drawn Snowman maze"></span><span class="level-copy"><small>02 · A FROSTY GETAWAY</small><strong>The Snowman</strong><span><i class="status-dot"></i> Ready to run</span></span><b class="level-arrow">↗</b></button>
+      <button class="level-card" id="pound-town-card" data-level="pound-town" aria-pressed="false"><span class="art-thumb"><img src="assets/pound-town.jpg" alt="Christel’s hand-drawn Pound Town maze"></span><span class="level-copy"><small>03 · COME ON DOWN</small><strong>Pound Town</strong><span><i class="status-dot"></i> Ready to run</span></span><b class="level-arrow">↗</b></button>
       <div class="difficulty"><label for="difficulty">CHASE INTENSITY</label><select id="difficulty"><option value="gentle">Gentle</option><option value="normal" selected>Normal</option><option value="wild">Wild</option></select></div>
       <div class="launch"><button id="play" class="primary" disabled><span>Preparing the maze…</span><b>↗</b></button><p><span class="key">W A S D</span> to move <span class="separator">/</span> Keyboard + mouse</p></div>
       <div class="sidebar-footer"><span>STRANGE LITTLE WORLDS, BY CHRISTEL</span><span>✳</span></div>
@@ -28,7 +29,7 @@
         <div class="world-caption"><span class="eyebrow" id="home-expedition">EXPEDITION 01</span><h2 id="home-title">THE<br>MOUNTAINS<span>↗</span></h2><p id="home-caption">Snowy summits. Autumn heights.<br>Green foothills. One way out.</p></div>
         <div class="world-stamp"><span>HAND DRAWN</span><b>↟</b><span>BUILT TO GET LOST</span></div>
         <div class="world-hint"><span class="orbit-icon">⤧</span> Drag to look around <span>·</span> Scroll to zoom</div>
-        <div class="mission-strip"><div><span class="little-mountain">△</span><span><small>THE TERRAIN</small><b id="home-terrain">Snow, leaves & dirt trails</b></span></div><div><small>YOUR WINDOW</small><b id="home-duration">—</b></div><div><small>THE COMPANY</small><b>1 menace. 3 cats.</b></div><button id="view-original">See the original <span>↗</span></button></div>
+        <div class="mission-strip"><div><span class="little-mountain">△</span><span><small>THE TERRAIN</small><b id="home-terrain">Snow, leaves & dirt trails</b></span></div><div><small>YOUR WINDOW</small><b id="home-duration">—</b></div><div><small>THE COMPANY</small><b id="home-company">1 menace. 3 cats.</b></div><button id="view-original">See the original <span>↗</span></button></div>
       </div>
       <div class="game-hud hidden" id="game-hud">
         <div class="hud-left"><span class="eyebrow"><span id="hud-expedition">EXPEDITION 01</span> · <span id="biome">Green foothills</span></span><strong id="hud-title">The Mountains</strong><span id="hunter-status">Stickman is waiting…</span></div>

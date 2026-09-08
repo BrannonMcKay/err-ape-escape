@@ -1,3 +1,4 @@
+import {huntersIn} from './core.js';
 export const SOUND_RANGES={meow:20,catRelease:20,hunterStep:30,menace:34,taunt:38,frustration:38};
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
@@ -15,12 +16,12 @@ export class AudioCues{
     if(this.round!==round){this.round=round;this.reset();}
     if(!active){this.reset();return {events:[],purring:false};}
     const events=[],p=round.player;dt=clamp(dt,0,.25);
-    for(const [name,actor,stride,kind] of [['player',p,1.6,'playerStep'],['hunter',round.hunter,1.65,'hunterStep']]){
+    for(const [name,actor,stride,kind] of [['player',p,1.6,'playerStep'],...huntersIn(round).map(h=>[h.id||'hunter',h,1.65*(h.scale||1),'hunterStep'])]){
       const before=this.positions.get(name);this.positions.set(name,{x:actor.x,z:actor.z});
       const traveled=before?Math.hypot(actor.x-before.x,actor.z-before.z):0;
       // Ignore teleports, blocked input, posing, and paused-frame backlogs.
       if(traveled>.00001&&traveled<=Math.max(.3,dt*12)){
-        this.steps[name]+=traveled;
+        this.steps[name]=(this.steps[name]||0)+traveled;
         if(this.steps[name]>=stride){this.steps[name]%=stride;events.push({kind,source:actor});}
       }else if(traveled===0||traveled>Math.max(.3,dt*12))this.steps[name]=0;
     }
@@ -34,7 +35,8 @@ export class AudioCues{
     }
     this.menace-=dt;
     if(this.menace<=0){
-      if(!round.hunter.panic&&spatialMix(p,round.hunter,SOUND_RANGES.menace).gain>0)events.push({kind:'menace',source:round.hunter});
+      const nearest=huntersIn(round).filter(h=>!h.panic).sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
+      if(nearest&&spatialMix(p,nearest,SOUND_RANGES.menace).gain>0)events.push({kind:'menace',source:nearest});
       this.menace=7+this.random()*5;
     }
     return {events,purring:round.heldCat!==null};

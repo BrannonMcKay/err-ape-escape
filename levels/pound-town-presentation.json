@@ -1,0 +1,23 @@
+{
+  "sourceSize":[1348,1024],
+  "elevation":{"drop":24,"direction":[0.4,0.6],"offset":2},
+  "hunter":{"scale":1,"speedMultiplier":1},
+  "extraHunters":[{"id":"giant","name":"The Demolition Man","cell":[309,121],"scale":2,"speedMultiplier":0.3333333333333333,"weapon":"sledgehammer"}],
+  "theme":{"id":"pound-town-ruins","colors":{"sky":"#b77982","fog":"#c69383"}},
+  "wallHeights":{"tall":7.8,"low":0.86,"sill":0.65,"lintel":6.9},
+  "lowWallRegions":[[0,0,449,341]],
+  "windowRegions":[[129,87,8,25],[197,95,9,37],[160,133,15,26],[50,168,7,26],[345,182,11,23],[370,279,32,6],[86,132,6,25],[269,34,8,35]],
+  "solidProps":[
+    {"id":"hammer-head","height":14.4,"color":"#687484","polygon":[[687,448],[800,364],[844,391],[976,661],[985,708],[874,745],[823,669],[788,595]]},
+    {"id":"hammer-handle","height":3.0,"color":"#8e5838","polygon":[[386,767],[750,552],[779,603],[417,823]]},
+    {"id":"tower","height":16.8,"color":"#9c8478","polygon":[[1105,306],[1266,305],[1271,840],[1110,840]]},
+    {"id":"fallen-building","height":7.8,"color":"#b69f87","polygon":[[815,742],[978,638],[1094,470],[1115,473],[1120,840],[814,840]]}
+  ],
+  "artLayers":[
+    {"id":"invitation","crop":[52,61,425,122],"color":"#382c38"},
+    {"id":"whoa","crop":[582,25,192,100],"color":"#382c38"},
+    {"id":"courtyard","crop":[837,250,197,82],"color":"#75312c"},
+    {"id":"escape","crop":[132,877,283,112],"color":"#382c38"}
+  ],
+  "graffiti":[]
+}

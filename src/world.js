@@ -1,9 +1,12 @@
 import * as THREE from '../vendor/three.module.js';
+import {huntersIn} from './core.js';
+import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
 import {createWallStyles,opaqueAt} from './presentation.js';
 import {idlePerformance} from './runner-animation.js';
 import {mountainMaterials} from './terrain-material.js';
 import {terrainAt} from './terrain.js';
 import {winterMaterials,buildWinterDecor,WinterWeather} from './winter-world.js';
+import {STICKMAN_TUNING,isStickmanEnraged,stickmanSpeedMultiplier} from './stickman-tuning.js';
 
 const color = { ink:0x292435, stone:0x8c819a, top:0xbaa8b2, path:0xd9c3b5, mint:0xd4ef93, pink:0xdd719d };
 const mat=(c,extra={})=>new THREE.MeshStandardMaterial({color:c,roughness:.88,...extra});
@@ -132,16 +135,18 @@ export function makeRunner(){
     limbs[0].rotation.x=-fall*.7;limbs[2].rotation.x=fall*.55;limbs[1].rotation.z=-fall*.65;limbs[3].rotation.z=fall*.65;
   },reset(){turn=idleBlend=photoBlend=0;limbs.forEach(l=>l.rotation.set(0,0,0));elbows.forEach(e=>e.rotation.set(0,0,0));body.rotation.set(0,0,0);body.position.set(0,0,0);carry.position.set(0,.96,.36);carry.rotation.set(0,0,0);expression.material.map=normalTexture;}};
 }
-export function makeStickman(){
-  const root=new THREE.Group(),body=new THREE.Group();root.add(body);const ink=mat(color.ink),white=mat(0xfff8e8);const limbs=[];
+export function makeStickman(weapon=null){
+  const root=new THREE.Group(),body=new THREE.Group();root.add(body);const ink=mat(color.ink),white=mat(STICKMAN_TUNING.calmFace);const limbs=[];
+  const calmFace=new THREE.Color(STICKMAN_TUNING.calmFace),rageFace=new THREE.Color(STICKMAN_TUNING.rageFace);
   rod(body,ink,[0,.7,0],[0,1.5,0],.045);
   for(const side of [-1,1]){
     const leg=new THREE.Group();leg.position.set(0,.76,0);body.add(leg);rod(leg,ink,[0,0,0],[side*.16,-.36,0],.043);rod(leg,ink,[side*.16,-.36,0],[side*.25,-.72,.07],.043);limbs.push(leg);
     const arm=new THREE.Group();arm.position.set(0,1.37,0);body.add(arm);rod(arm,ink,[0,0,0],[side*.3,-.23,0],.04);rod(arm,ink,[side*.3,-.23,0],[side*.46,-.1,.13],.04);
     for(let i=-1;i<=1;i++)rod(arm,ink,[side*.46,-.1,.13],[side*(.55+i*.035),-.03+i*.07,.15],.02);limbs.push(arm);
   }
-  ball(body,new THREE.MeshBasicMaterial({color:color.ink,side:THREE.BackSide}),0,1.85,0,.435);ball(body,white,0,1.85,.025,.403,.403,.412);
-  const smile=face(body,'smile',.37,1.85,.442),pout=face(body,'pout',.37,1.85,.444),grin=face(body,'grin',.40,1.85,.445),horror=face(body,'horrified',.40,1.85,.446);pout.visible=false;grin.visible=false;horror.visible=false;
+  const head=new THREE.Group();head.position.y=1.85;body.add(head);
+  ball(head,new THREE.MeshBasicMaterial({color:color.ink,side:THREE.BackSide}),0,0,0,.435);ball(head,white,0,0,.025,.403,.403,.412);
+  const smile=face(head,'smile',.37,0,.442),pout=face(head,'pout',.37,0,.444),grin=face(head,'grin',.40,0,.445),horror=face(head,'horrified',.40,0,.446);pout.visible=false;grin.visible=false;horror.visible=false;
   const ears=new THREE.Group(),flail=new THREE.Group();body.add(ears,flail);ears.visible=flail.visible=false;
   for(const side of [-1,1]){
     rod(ears,ink,[0,1.37,0],[side*.63,1.43,.06],.04);rod(ears,ink,[side*.63,1.43,.06],[side*.40,1.86,.08],.04);
@@ -149,13 +154,35 @@ export function makeStickman(){
     rod(flail,ink,[0,1.37,0],[side*.38,1.65,0],.04);rod(flail,ink,[side*.38,1.65,0],[side*.64,2.04,.08],.04);
     for(let i=-1;i<=1;i++){rod(ears,ink,[side*.40,1.86,.08],[side*.39,1.88+i*.065,.21],.018);rod(flail,ink,[side*.64,2.04,.08],[side*(.66+i*.075),2.18,.10],.018);}
   }
-  return {root,animate(t,moving,stunned,panic=null){
+  const hammer=new THREE.Group(),grip=new THREE.Group(),gripSegments=[];body.add(hammer,grip);hammer.visible=grip.visible=!!weapon;hammer.position.set(.35,1.2,.2);
+  if(weapon){
+    const wood=mat(0x99603b),steel=mat(0x667783,{metalness:.65,roughness:.43});
+    rod(hammer,wood,[0,-.55,0],[0,1.02,0],.055);
+    mesh(new THREE.BoxGeometry(1.04,.43,.49),steel,hammer,0,1.02,0);
+    for(const side of [-1,1])mesh(new THREE.BoxGeometry(.07,.46,.52),mat(0xb6babe,{metalness:.7,roughness:.4}),hammer,side*.51,1.02,0);
+    for(let i=0;i<4;i++)gripSegments.push(mesh(new THREE.CylinderGeometry(.04,.04,1,8),ink,grip));
+  }
+  function poseGrip(){
+    if(!weapon)return;grip.rotation.set(0,0,0);grip.position.set(0,0,0);
+    for(let side=0;side<2;side++){
+      const shoulder=new THREE.Vector3(0,1.37,0),hand=new THREE.Vector3(0,-.07-side*.28,0).applyEuler(hammer.rotation).add(hammer.position);
+      const elbow=shoulder.clone().lerp(hand,.5);elbow.x+=(side?1:-1)*.3;elbow.z+=.10;
+      for(const [n,a,b] of [[side*2,shoulder,elbow],[side*2+1,elbow,hand]]){const v=b.clone().sub(a),m=gripSegments[n];m.position.copy(a).add(b).multiplyScalar(.5);m.scale.y=v.length();m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());}
+    }
+  }
+  return {root,faceCamera:STICKMAN_TUNING.faceCamera,lookAtCamera(camera,enraged){
+    white.color.copy(enraged?rageFace:calmFace);
+    // The parent may be leaning, running, or tackling. lookAt compensates for it.
+    if(this.faceCamera)head.lookAt(camera.position);else head.quaternion.identity();
+  },animate(t,moving,stunned,panic=null,speedMultiplier=1){
     stunned=!!stunned;
-    const rate=panic?23:12,a=moving?Math.sin(t*rate)*(panic?1.05:.7):Math.sin(t*3)*.05;
+    const rate=(panic?23:12)*speedMultiplier,a=moving?Math.sin(t*rate)*(panic?1.05:.7):Math.sin(t*3)*.05;
     limbs.forEach(l=>l.rotation.set(0,0,0));limbs[0].rotation.x=a;limbs[2].rotation.x=-a;limbs[1].rotation.x=-a;limbs[3].rotation.x=a;
     limbs[1].visible=limbs[3].visible=!panic;ears.visible=panic?.kind==='scream';flail.visible=panic?.kind==='period';flail.rotation.z=Math.sin(t*17)*.07;
+    if(weapon){grip.rotation.set(0,0,0);grip.position.set(0,0,0);limbs[1].visible=limbs[3].visible=false;grip.visible=!panic;hammer.rotation.set(panic?-.25:0,0,panic?-.35:Math.sin(t*3)*.025);hammer.position.set(.35,1.2,.2);}
     body.rotation.set(panic&&moving?.18:0,0,panic?Math.sin(t*18)*.065:stunned?Math.sin(t*6)*.15:0);body.position.y=moving?Math.abs(Math.sin(t*rate))*(panic?.13:.07):0;
     smile.visible=!stunned&&!panic;pout.visible=stunned&&!panic;horror.visible=!!panic;grin.visible=false;
+    poseGrip();
   },tackle(t){
     smile.visible=false;pout.visible=false;horror.visible=false;grin.visible=true;ears.visible=flail.visible=false;limbs[1].visible=limbs[3].visible=true;
     const charge=THREE.MathUtils.smoothstep(t,.35,.95),recover=THREE.MathUtils.smoothstep(t,1.05,1.7);
@@ -163,7 +190,15 @@ export function makeStickman(){
     body.position.y=t<1.1?Math.sin(Math.min(1,Math.max(0,(t-.35)/.75))*Math.PI)*.42:0;
     limbs[1].rotation.x=limbs[3].rotation.x=-1.25*(1-recover);
     limbs[1].rotation.z=recover*.85;limbs[3].rotation.z=-recover*.85;
-  },reset(){limbs.forEach(l=>{l.rotation.set(0,0,0);l.visible=true;});body.rotation.set(0,0,0);ears.visible=flail.visible=horror.visible=false;}};
+  },hammerStrike(t){
+    smile.visible=pout.visible=horror.visible=ears.visible=flail.visible=false;grin.visible=true;
+    limbs[1].visible=limbs[3].visible=false;grip.visible=true;
+    const windup=THREE.MathUtils.smoothstep(t,.1,.65),swing=THREE.MathUtils.smoothstep(t,.7,.98),recover=THREE.MathUtils.smoothstep(t,1.3,2.25);
+    hammer.position.set(.35*(1-swing)*(1-recover),1.2,.2);hammer.rotation.set((-1.05*windup+3.05*swing)*(1-recover),0,0);
+    body.rotation.set(.11*swing*(1-recover),0,0);body.position.y=0;
+    // Both stick arms follow the shaft during the overhead wind-up and bonk.
+    poseGrip();
+  },reset(){limbs.forEach(l=>{l.rotation.set(0,0,0);l.visible=true;});body.rotation.set(0,0,0);head.quaternion.identity();white.color.copy(calmFace);ears.visible=flail.visible=horror.visible=false;}};
 }
 function makeCat(kind='ginger'){
   const stubby=kind==='stubby',g=new THREE.Group(),orange=mat(stubby?0x9a8a70:0xf4b765),white=mat(stubby?0xf5f1e5:0xffe9c9),ink=mat(color.ink),pink=mat(0xdb9291);
@@ -215,7 +250,7 @@ function rectangles(maze,predicate){
 export class World{
   constructor(canvas,maze,renderer=null){
     this.maze=maze;this.scene=new THREE.Scene();this.scene.background=new THREE.Color(maze.presentation?.theme?.colors.sky||0x282736);this.scene.fog=new THREE.FogExp2(maze.presentation?.theme?.colors.fog||0x958090,.003);
-    this.wallStyles=createWallStyles(maze);this.cutaway={active:{value:0},center:{value:new THREE.Vector2()}};
+    this.wallStyles=createWallStyles(maze);this.cutaway={active:{value:0},center:{value:new THREE.Vector2()},ground:{value:0}};
     this.renderer=renderer||new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.25;
@@ -226,18 +261,20 @@ export class World{
     this.light=sun;this.buildMaze();this.buildScenery();this.buildArtwork();
     if(maze.id==='snowman')this.weather=new WinterWeather(this.scene,maze);
     this.runner=makeRunner();this.stickman=makeStickman();this.scene.add(this.runner.root,this.stickman.root);
+    this.extraStickmen=(maze.presentation?.extraHunters||[]).map(h=>{const model=makeStickman(h.weapon);this.scene.add(model.root);return model;});
     this.cats=[makeCat(),makeCat(),makeCat('stubby')];this.cats.forEach(c=>this.scene.add(c.root));
     this.buildFoodBowl();
     this.startMarker=this.makeMarker(maze.point(maze.startIndex),0xd4ef93,'YOU START HERE',-4);
     this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),0xf3b48b,'EXIT + STICKMAN',4);
     this.markers=[this.startMarker,this.exitMarker];
+    for(const h of maze.presentation?.extraHunters||[])this.markers.push(this.makeMarker(maze.point(h.cell[1]*maze.width+h.cell[0]),0xf3b48b,'SLEDGEHAMMER GIANT',4));
     this.orbit=0;this.zoom=1;this.look=new THREE.Vector3();this.temp=new THREE.Vector3();this.lastSize='';
     this.camera.position.set(100,125,130);this.camera.lookAt(0,0,12);
     this.effects=[];
     this.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
     if(!document.getElementById('speech-styles')){const speechStyle=document.createElement('link');speechStyle.id='speech-styles';speechStyle.rel='stylesheet';speechStyle.href=new URL('./speech.css',import.meta.url).href;document.head.append(speechStyle);}
     this.speech={};
-    for(const [who,name] of [['player','Christel'],['hunter','Stickman']]){
+    for(const [who,name] of [['player','Christel'],['hunter','Stickman'],...(maze.presentation?.extraHunters||[]).map(h=>[h.id,h.name])]){
       const bubble=document.createElement('div');bubble.className=`character-speech ${who==='player'?'runner-speech':''}`;bubble.setAttribute('role','status');bubble.setAttribute('aria-label',`${name} says`);bubble.hidden=true;document.body.append(bubble);this.speech[who]=bubble;
     }
   }
@@ -250,15 +287,15 @@ export class World{
   cutawayMaterial(material){
     const prior=material.onBeforeCompile,priorKey=material.customProgramCacheKey();
     material.onBeforeCompile=shader=>{
-      prior.call(material,shader);shader.uniforms.uCapture=this.cutaway.active;shader.uniforms.uCaptureCenter=this.cutaway.center;
+      prior.call(material,shader);shader.uniforms.uCapture=this.cutaway.active;shader.uniforms.uCaptureCenter=this.cutaway.center;shader.uniforms.uCaptureGround=this.cutaway.ground;
       shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vCutawayPosition;').replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
         vec4 cutPos = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
           cutPos = instanceMatrix * cutPos;
         #endif
         vCutawayPosition = (modelMatrix * cutPos).xyz;`);
-      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vCutawayPosition;\nuniform float uCapture;\nuniform vec2 uCaptureCenter;').replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
-        if(uCapture > 0.5 && distance(vCutawayPosition.xz,uCaptureCenter)<6.5 && vCutawayPosition.y>0.25) discard;`);
+      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vCutawayPosition;\nuniform float uCapture;\nuniform float uCaptureGround;\nuniform vec2 uCaptureCenter;').replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
+        if(uCapture > 0.5 && distance(vCutawayPosition.xz,uCaptureCenter)<6.5 && vCutawayPosition.y>uCaptureGround+0.25) discard;`);
     };
     material.customProgramCacheKey=()=>priorKey+'-capture-cutaway';return material;
   }
@@ -266,10 +303,10 @@ export class World{
     const maze=this.maze,s=maze.cellSize;
     const create=(rects,height,y,materials,variation=0)=>{
       const geo=new THREE.BoxGeometry(1,1,1),batch=new THREE.InstancedMesh(geo,materials,rects.length),m=new THREE.Matrix4(),q=new THREE.Quaternion();
-      rects.forEach((r,i)=>{m.compose(new THREE.Vector3((r.x+r.w/2-maze.width/2)*s,y,(r.y+r.h/2-maze.height/2)*s),q,new THREE.Vector3(r.w*s,height,r.h*s));batch.setMatrixAt(i,m);if(variation)batch.setColorAt(i,new THREE.Color().setScalar(.91+((r.x*13+r.y*7)%19)/100));});
+      rects.forEach((r,i)=>{m.compose(new THREE.Vector3((r.x+r.w/2-maze.width/2)*s,y,(r.y+r.h/2-maze.height/2)*s),q,new THREE.Vector3(r.w*s,height,r.h*s));m.elements[1]=maze.slope.x*r.w*s;m.elements[9]=maze.slope.z*r.h*s;m.elements[13]+=maze.heightAt(m.elements[12],m.elements[14]);batch.setMatrixAt(i,m);if(variation)batch.setColorAt(i,new THREE.Color().setScalar(.91+((r.x*13+r.y*7)%19)/100));});
       batch.castShadow=height>1;batch.receiveShadow=true;this.scene.add(batch);return batch;
     };
-    const terrain=maze.presentation?.theme?.id==='mountain-seasons'?mountainMaterials(maze):maze.id==='snowman'?winterMaterials(maze):null;
+    const terrain=maze.presentation?.theme?.id==='mountain-seasons'?mountainMaterials(maze):maze.id==='snowman'?winterMaterials(maze):maze.id==='pound-town'?cityMaterials():null;
     const wallMat=this.cutawayMaterial(terrain?.wall||rock(color.stone)),topMat=this.cutawayMaterial(terrain?.top||rock(color.top)),sideMat=rock(terrain?0x554532:0x514859);
     const h=maze.presentation?.wallHeights||{tall:3.4,low:1.05,sill:.65,lintel:2.75};
     const materials=[wallMat,wallMat,topMat,wallMat,wallMat,wallMat];
@@ -279,7 +316,8 @@ export class World{
     const windows=styleRects(2),glass=this.cutawayMaterial(new THREE.MeshStandardMaterial({color:0x9ee7dd,transparent:true,opacity:.19,roughness:.12,metalness:.15,depthWrite:false}));
     create(windows,h.sill,h.sill/2,materials);
     create(windows,h.tall-h.lintel,(h.tall+h.lintel)/2,materials);
-    this.windows=create(windows,h.lintel-h.sill,(h.lintel+h.sill)/2,glass);this.windows.castShadow=false;
+    this.windows=create(windows,h.lintel-h.sill,(h.lintel+h.sill)/2,glass);this.windows.castShadow=false;if(maze.id==='pound-town')this.windows.visible=false;
+    for(const [i,prop] of (maze.presentation?.solidProps||[]).entries()){const material=this.cutawayMaterial(cityPropMaterial(prop));create(styleRects(i+3),prop.height,prop.height/2,material);}
     // Narrow mullions at the ends of each window make the transparent barrier legible.
     const posts=windows.flatMap(r=>r.h>r.w?[{...r,h:.18},{...r,y:r.y+r.h-.18,h:.18}]:[{...r,w:.18},{...r,x:r.x+r.w-.18,w:.18}]);
     create(posts,h.lintel-h.sill,(h.lintel+h.sill)/2,this.cutawayMaterial(mat(0x827577)));
@@ -288,11 +326,12 @@ export class World{
     const pebbleGeo=new THREE.DodecahedronGeometry(.06),pebbleMat=mat(terrain?0xffffff:0x95808b);
     const spots=[];if(maze.id!=='snowman')for(let i=0;i<maze.walk.length;i+=23)if(maze.walk[i])spots.push(maze.point(i));
     const pebbles=new THREE.InstancedMesh(pebbleGeo,pebbleMat,spots.length),m=new THREE.Matrix4();
-    spots.forEach((p,i)=>{m.makeTranslation(p.x,.01,p.z);pebbles.setMatrixAt(i,m);if(terrain)pebbles.setColorAt(i,new THREE.Color(terrainAt(maze,p.x,p.z).snow>.5?0xe1eef0:0x887052));});this.scene.add(pebbles);
+    spots.forEach((p,i)=>{m.makeTranslation(p.x,maze.heightAt(p.x,p.z)+.01,p.z);pebbles.setMatrixAt(i,m);if(terrain)pebbles.setColorAt(i,new THREE.Color(terrainAt(maze,p.x,p.z).snow>.5?0xe1eef0:0x887052));});this.scene.add(pebbles);
   }
   buildScenery(){
     const scene=this.scene;
     if(this.maze.id==='snowman'){buildWinterDecor(this);return;}
+    if(this.maze.id==='pound-town'){buildCityDecor(this);return;}
     const seasonal=this.maze.presentation?.theme?.id==='mountain-seasons';
     const backdrop=mesh(new THREE.PlaneGeometry(1100,1100),mat(seasonal?0x81938b:0x68617c),scene,0,-9,0);backdrop.rotation.x=-Math.PI/2;backdrop.castShadow=false;
     for(let i=0;i<24;i++){
@@ -326,8 +365,11 @@ export class World{
       return new THREE.Mesh(geometry,inkMaterial(layer.color));
     };
     for(const layer of p.artLayers||[]){
-      const [x,y,w,h]=layer.crop,plane=cutout(layer,w*scale,h*scale);
-      plane.rotation.x=-Math.PI/2;plane.position.set((x+w/2)/maze.sourceStep*maze.cellSize-maze.width*maze.cellSize/2,.01,(y+h/2)/maze.sourceStep*maze.cellSize-maze.height*maze.cellSize/2);this.artwork.add(plane);
+      const [x,y,w,h]=layer.crop,plane=cutout(layer,w*scale,h*scale);plane.name=layer.id;
+      plane.rotation.x=-Math.PI/2;plane.position.set((x+w/2)/maze.sourceStep*maze.cellSize-maze.width*maze.cellSize/2,.01,(y+h/2)/maze.sourceStep*maze.cellSize-maze.height*maze.cellSize/2);if(maze.slope.x||maze.slope.z){
+        plane.updateMatrix();plane.geometry.applyMatrix4(plane.matrix);plane.position.set(0,0,0);plane.rotation.set(0,0,0);
+        const pos=plane.geometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setY(i,pos.getY(i)+maze.heightAt(pos.getX(i),pos.getZ(i)));plane.geometry.computeVertexNormals();
+      }this.artwork.add(plane);
       // A second, upright copy makes the original pen-drawn sun visible from inside the maze.
       if(layer.id==='sun'){const skySun=cutout(layer,43,43*h/w);skySun.material.uniforms.isSkySun.value=1;skySun.position.set(-38,27,-74);skySun.rotation.y=.22;this.artwork.add(skySun);}
     }
@@ -349,14 +391,14 @@ export class World{
     this.foodLabel=label('DINNER BELL','#d4ef93');this.foodLabel.scale.set(1.65,.42,1);this.foodLabel.position.y=.95;this.foodLabel.material.depthTest=true;this.foodBowl.add(this.foodLabel);
   }
   makeMarker(p,c,text,offset){
-    const g=new THREE.Group();g.position.set(p.x,0,p.z);this.scene.add(g);
+    const g=new THREE.Group();g.position.set(p.x,this.maze.heightAt(p.x,p.z),p.z);this.scene.add(g);
     const ring=mesh(new THREE.TorusGeometry(.53,.09,8,36),new THREE.MeshBasicMaterial({color:c}),g,0,.13,0);ring.rotation.x=Math.PI/2;
     const beam=mesh(new THREE.CylinderGeometry(.08,.08,8,8),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.7}),g,0,4,0);beam.castShadow=false;
     const sign=label(text,c===0xd4ef93?'#d4ef93':'#f3b48b');sign.position.set(offset,10+Math.abs(offset)*.2,0);g.add(sign);
     return {root:g,ring,beam,sign};
   }
   burst(p,c=0xd4ef93){
-    const g=new THREE.Group();g.position.set(p.x,.8,p.z);const m=new THREE.MeshBasicMaterial({color:c});
+    const g=new THREE.Group();g.position.set(p.x,this.maze.heightAt(p.x,p.z)+.8,p.z);const m=new THREE.MeshBasicMaterial({color:c});
     for(let i=0;i<14;i++){const dot=mesh(new THREE.IcosahedronGeometry(.07),m,g);dot.userData.velocity=new THREE.Vector3(Math.cos(i*2.4)*1.3,1+Math.sin(i)*.8,Math.sin(i*2.4)*1.3);}
     this.scene.add(g);this.effects.push({root:g,life:1});
   }
@@ -369,15 +411,15 @@ export class World{
     const a=.52+this.orbit,fit=Math.max(1,1.15/Math.max(.25,aspect));return {position:new THREE.Vector3(Math.sin(a)*105,122,Math.cos(a)*125+9).multiplyScalar(this.zoom*fit),target:new THREE.Vector3(0,0,10)};
   }
   followPose(round){
-    const p=round.player,a=p.angle;
-    const target=new THREE.Vector3(p.x,1.18,p.z),back=new THREE.Vector3(Math.sin(a),0,Math.cos(a));
+    const p=round.player,a=p.angle,ground=this.maze.heightAt(p.x,p.z);
+    const target=new THREE.Vector3(p.x,ground+1.18,p.z),back=new THREE.Vector3(Math.sin(a),0,Math.cos(a));
     // Shorten the camera boom at walls. Camera stays below the tall maze walls.
-    let dist=2.5;for(let d=.2;d<=2.5;d+=.1){if(opaqueAt(this.maze,this.wallStyles,p.x-back.x*d,2.2,p.z-back.z*d)){dist=Math.max(.22,d-.18);break;}}
-    const pos=new THREE.Vector3(p.x-back.x*dist,2.20+(2.5-dist)*.12,p.z-back.z*dist);
+    let dist=2.5;for(let d=.2;d<=2.5;d+=.1){if(opaqueAt(this.maze,this.wallStyles,p.x-back.x*d,ground+2.2,p.z-back.z*d)){dist=Math.max(.22,d-.18);break;}}
+    const pos=new THREE.Vector3(p.x-back.x*dist,ground+2.20+(2.5-dist)*.12,p.z-back.z*dist);
     target.addScaledVector(back,2.2);return {position:pos,target};
   }
   actorInView(actor,height=1.85){
-    const target=new THREE.Vector3(actor.x,height,actor.z),screen=target.clone().project(this.camera);
+    const target=new THREE.Vector3(actor.x,this.maze.heightAt(actor.x,actor.z)+height,actor.z),screen=target.clone().project(this.camera);
     if(screen.z<=-1||screen.z>=1||Math.abs(screen.x)>.97||Math.abs(screen.y)>.97||target.distanceTo(this.camera.position)>27)return false;
     const start=this.camera.position,steps=Math.max(1,Math.ceil(start.distanceTo(target)/.12));
     for(let i=1;i<=steps;i++){const t=i/steps;if(opaqueAt(this.maze,this.wallStyles,start.x+(target.x-start.x)*t,start.y+(target.y-start.y)*t,start.z+(target.z-start.z)*t))return false;}
@@ -388,11 +430,11 @@ export class World{
     const rect=this.renderer.domElement.getBoundingClientRect(),active=round.phase==='playing'&&(view==='playing'||view==='paused');
     const paired=active&&round.player.speech&&round.hunter.speech&&this.stickmanInView(round);
     const boxes=[];
-    for(const who of ['player','hunter']){
-      const actor=round[who],bubble=this.speech[who],shown=active&&!!actor.speech&&this.actorInView(actor,who==='player'?1.5:1.85*(actor.scale||1));
+    for(const who of Object.keys(this.speech)){
+      const actor=round[who]||round.extraHunters?.find(h=>h.id===who),bubble=this.speech[who],shown=active&&!!actor.speech&&this.actorInView(actor,who==='player'?1.5:1.85*(actor.scale||1));
       bubble.hidden=!shown;if(!shown)continue;
       if(bubble.textContent!==actor.speech.text)bubble.textContent=actor.speech.text;
-      const pos=new THREE.Vector3(actor.x,who==='player'?1.84:2.34*(actor.scale||1),actor.z).project(this.camera);
+      const pos=new THREE.Vector3(actor.x,this.maze.heightAt(actor.x,actor.z)+(who==='player'?1.84:2.34*(actor.scale||1)),actor.z).project(this.camera);
       const half=bubble.offsetWidth/2+8;
       const anchor=rect.left+(pos.x+1)/2*rect.width,offset=paired?(who==='player'?-110:70):0;
       const x=THREE.MathUtils.clamp(anchor+offset,rect.left+half,rect.right-half);
@@ -406,32 +448,36 @@ export class World{
   }
   capturePose(round){
     const c=round.capture,p=c.player,h=c.hunter,t=c.elapsed;
-    const giant=round.hunter.scale||1;
+    const giant=h.scale||1,ground=this.maze.heightAt(p.x,p.z),model=c.attackerId==='hunter'||!c.attackerId?this.stickman:this.extraStickmen[round.extraHunters.findIndex(h=>h.id===c.attackerId)];
     const len=Math.hypot(p.x-h.x,p.z-h.z)||1,dx=(p.x-h.x)/len,dz=(p.z-h.z)/len;
     const approach=THREE.MathUtils.smoothstep(t,.35,.98),settle=THREE.MathUtils.smoothstep(t,1.05,1.8);
     // One shoulder charge, then separate poses: runner sprawls sideways, Stickman stands and gloats.
-    this.runner.root.position.set(p.x+dx*.3*settle,0,p.z+dz*.3*settle);this.runner.root.rotation.y=Math.atan2(dx,dz);
-    this.stickman.root.position.set(p.x-dx*(1.3-.95*approach)-dz*.35*settle,0,p.z-dz*(1.3-.95*approach)+dx*.35*settle);
-    this.runner.tackle(t);this.stickman.tackle(t);
-    const position=new THREE.Vector3(p.x+(dz*3.6-dx*1.8)*giant,2.65*giant,p.z-(dx*3.6+dz*1.8)*giant),target=new THREE.Vector3(p.x,1.02*giant,p.z);
-    const grin=THREE.MathUtils.smoothstep(t,2,3.15),s=this.stickman.root.position;
-    const close=new THREE.Vector3(s.x+(dz*2.5-dx*.85)*giant,2.15*giant,s.z-(dx*2.5+dz*.85)*giant);
-    position.lerp(close,grin*.7);target.lerp(new THREE.Vector3(s.x,1.55*giant,s.z),grin*.65);
-    this.stickman.root.rotation.y=t<1.15?Math.atan2(dx,dz):Math.atan2(position.x-s.x,position.z-s.z);
-    this.cutaway.center.value.set(p.x,p.z);
+    this.runner.root.position.set(p.x+dx*.3*settle,ground,p.z+dz*.3*settle);this.runner.root.rotation.y=Math.atan2(dx,dz);
+    model.root.position.set(p.x-dx*(c.weapon?2.2:1.3-.95*approach)-dz*.35*settle,ground,p.z-dz*(c.weapon?2.2:1.3-.95*approach)+dx*.35*settle);
+    this.runner.tackle(t);if(c.weapon)model.hammerStrike(t);else model.tackle(t);
+    const position=new THREE.Vector3(p.x+(dz*3.6-dx*1.8)*giant,ground+2.65*giant,p.z-(dx*3.6+dz*1.8)*giant),target=new THREE.Vector3(p.x,ground+1.02*giant,p.z);
+    const grin=THREE.MathUtils.smoothstep(t,2,3.15),s=model.root.position;
+    const close=new THREE.Vector3(s.x+(dz*2.5-dx*.85)*giant,ground+2.15*giant,s.z-(dx*2.5+dz*.85)*giant);
+    position.lerp(close,grin*.7);target.lerp(new THREE.Vector3(s.x,ground+1.55*giant,s.z),grin*.65);
+    model.root.rotation.y=t<1.15?Math.atan2(dx,dz):Math.atan2(position.x-s.x,position.z-s.z);
+    this.cutaway.center.value.set(p.x,p.z);this.cutaway.ground.value=ground;
     return {position,target};
   }
   update(round,dt,time,view='home'){
     this.resize();
     const capture=!!round?.capture&&(view==='capture'||view==='result'||(view==='paused'&&round.phase==='capture'));
     this.cutaway.active.value=capture?1:0;this.graffiti.visible=!capture;
-    if(!capture&&this.wasCapture){this.runner.reset();this.stickman.reset();}this.wasCapture=capture;
+    if(this.maze.id==='pound-town')this.artwork.children.forEach(p=>p.visible=['home','preview','transition'].includes(view)||p.name==='courtyard');
+    if(!capture&&this.wasCapture){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());}this.wasCapture=capture;
     if(round){
-      if(this.round!==round){this.runner.reset();this.stickman.reset();this.weather?.clear();this.round=round;}
-      const {player:p,hunter:h}=round;this.runner.root.position.set(p.x,0,p.z);this.runner.root.rotation.y=p.angle;
+      if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.round=round;}
+      const {player:p,hunter:h}=round;this.runner.root.position.set(p.x,this.maze.heightAt(p.x,p.z),p.z);this.runner.root.rotation.y=p.angle;
       const cameraOffset=Math.atan2(this.camera.position.x-p.x,this.camera.position.z-p.z)-p.angle;
       if(view!=='paused')this.runner.animate(time,!!p.moving,round.heldCat!==null,view==='playing'?p.idleSeconds:0,dt,cameraOffset,this.reducedMotion.matches);
-      this.stickman.root.position.set(h.x,0,h.z);this.stickman.root.scale.setScalar(h.scale||1);this.stickman.root.rotation.y=h.angle;if(view!=='paused')this.stickman.animate(time,!!h.moving,h.stunned>0||round.heldCat!==null||h.catBlocked,h.panic);
+      huntersIn(round).forEach((h,i)=>{const model=i?this.extraStickmen[i-1]:this.stickman;
+        model.root.position.set(h.x,this.maze.heightAt(h.x,h.z),h.z);model.root.scale.setScalar(h.scale||1);model.root.rotation.y=h.angle;
+        if(view!=='paused')model.animate(time,!!h.moving,h.stunned>0||round.heldCat!==null||h.catBlocked,h.panic,stickmanSpeedMultiplier(round));
+      });
       round.cats.forEach((c,i)=>{
         const obj=this.cats[i];obj.root.visible=c.state!=='hidden'&&c.state!=='summoned';obj.root.rotation.x=0;
         if(obj.nameTag)obj.nameTag.visible=(c.state==='ground'||c.state==='eating')&&!(c.pickupCooldown>0);
@@ -442,13 +488,13 @@ export class World{
           if(obj.root.parent!==this.scene)this.scene.add(obj.root);
           obj.root.rotation.z=0;
           const hop=c.jumpTime>0?Math.sin(c.jumpTime/.6*Math.PI)*.65:c.moving?Math.abs(Math.sin(time*8+i))*.16:Math.sin(time*3+i)*.015;
-          obj.root.position.set(c.x,.025+hop,c.z);obj.root.rotation.y=c.state==='eating'?Math.PI:c.angle??i*2;obj.root.scale.setScalar(1);
+          obj.root.position.set(c.x,this.maze.heightAt(c.x,c.z)+.025+hop,c.z);obj.root.rotation.y=c.state==='eating'?Math.PI:c.angle??i*2;obj.root.scale.setScalar(1);
           if(c.state==='eating'){obj.root.position.z+=.28;obj.root.rotation.x=.18+Math.sin(time*8)*.065;}else if(c.moving)obj.root.rotation.x=Math.sin(time*8+i)*.08;
         }
         obj.tail.rotation.y=Math.sin(time*2)*.16;
       });
       this.foodBowl.visible=!!round.food;
-      if(round.food){const f=round.food;this.foodBowl.position.set(f.x,0,f.z);this.kibble.visible=f.state!=='empty';this.kibble.scale.setScalar(f.state==='eating'?.25+.75*f.timer/5:1);this.foodLabel.visible=true;
+      if(round.food){const f=round.food;this.foodBowl.position.set(f.x,this.maze.heightAt(f.x,f.z),f.z);this.kibble.visible=f.state!=='empty';this.kibble.scale.setScalar(f.state==='eating'?.25+.75*f.timer/5:1);this.foodLabel.visible=true;
         const seconds=Math.ceil(round.foodCooldown),refill=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
         this.foodLabel.userData.setText(f.state==='waiting'?`STUBBY IN ${Math.ceil(f.timer)}s`:f.state==='eating'?`DINNER · ${Math.ceil(f.timer)}s`:seconds>0?`REFILL ${refill}`:'BOWL READY');
       }
@@ -466,6 +512,7 @@ export class World{
     const speed=view==='home'?dt*2:view==='preview'?dt*5:dt*14;
     this.camera.position.lerp(pose.position,Math.min(1,speed));this.look.lerp(pose.target,Math.min(1,speed));
     this.camera.up.set(0,1,0);this.camera.lookAt(this.look);
+    if(round)[this.stickman,...this.extraStickmen].forEach(m=>m.lookAtCamera(this.camera,isStickmanEnraged(round)));
     this.scene.fog.density=['playing','paused','result','capture'].includes(view)?.009:.002;
     for(const e of this.effects){e.life-=dt;e.root.children.forEach(c=>c.position.addScaledVector(c.userData.velocity,dt));e.root.scale.setScalar(Math.max(.01,e.life));if(e.life<=0){this.scene.remove(e.root);e.root.children.forEach(c=>c.geometry.dispose());e.root.children[0]?.material.dispose();}}
     this.effects=this.effects.filter(e=>e.life>0);if(this.sparks)this.sparks.rotation.y=time*.002;

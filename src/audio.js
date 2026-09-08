@@ -123,11 +123,11 @@ export class GameAudio{
     }
     this.playBuffer(buffer,{gain:volume});
   }
-  taunt(round,kind='taunt'){
+  taunt(round,kind='taunt',hunter=round.hunter){
     // Trigger at the speech event, never by polling a bubble that remains visible.
     for(const voice of this.voices)if(['menace','taunt','frustration'].includes(voice.kind))this.stopVoice(voice);
     this.cues.menace=7+this.random()*5;
-    return this.effect(kind,round.hunter,round.player);
+    return this.effect(kind,hunter,round.player);
   }
   releaseCat(cat,listener){
     if(this.purr){this.stopVoice(this.purr);this.purr=null;}

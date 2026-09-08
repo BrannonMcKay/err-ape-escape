@@ -1,4 +1,5 @@
-import {createMaze,findPath,moveWithCollision,lineClear,catBlocks,newRound,beginRound,finishRound,tryCapture,pickupCat,tickCats,dropFood,tickFood,roamCats,beginCapture,tickCapture,normalizeScores,RULES} from './core.js';
+import {createMaze,findPath,moveWithCollision,lineClear,catBlocks,newRound,beginRound,finishRound,tryCapture,pickupCat,tickCats,dropFood,tickFood,roamCats,beginCapture,tickCapture,normalizeScores,huntersIn,RULES} from './core.js';
+import {updatePursuit} from './hunter-ai.js';
 import {World} from './world.js';
 import {sightClear} from './presentation.js';
 import {tickRunnerIdle} from './runner-animation.js';
@@ -8,6 +9,7 @@ import {GameAudio} from './audio.js';
 import {terrainAt} from './terrain.js';
 import {LEVELS} from './levels.js';
 import {advanceSoundtrackClock} from './soundtrack-clock.js';
+import {isStickmanEnraged,stickmanSpeedMultiplier} from './stickman-tuning.js';
 
 const $=id=>document.getElementById(id),modal=$('modal'),content=$('modal-content'),keys=new Set();
 const ART=LEVELS;
@@ -138,32 +140,9 @@ function releaseCat(){
   return {x:p.x,z:p.z};
 }
 function updateHunter(dt){
-  const h=round.hunter,p=round.player;h.moving=false;h.catBlocked=false;
-  if(h.panic){tickPanic(round,maze,dt);aiTimer=0;aiRoute=[];aiStep=0;return;}
-  if(h.stunned>0){h.stunned=Math.max(0,h.stunned-dt);return;}
-  if(round.heldCat!==null&&distance(h,p)<2.5&&lineClear(maze,h,p)){h.catBlocked=true;return;}
-  aiTimer-=dt;
-  if(aiTimer<=0){
-    aiTimer=.85;const start=maze.index(h.x,h.z),target=maze.index(p.x,p.z);const blocks=catBlocks(maze,round.cats);
-    aiRoute=findPath(maze,start,target,blocks);
-    // If animals cut off every route, approach politely and wait at the first cat.
-    if(!aiRoute.length)aiRoute=findPath(maze,start,target);
-    aiStep=0;if(aiRoute.length&&distance(h,maze.point(aiRoute[0]))<.035)aiStep=1;
-  }
-  let budget=round.settings.hunterSpeed*dt;
-  while(budget>0&&aiStep<aiRoute.length){
-    const target=maze.point(aiRoute[aiStep]),dist=distance(h,target);
-    if(dist<.015){aiStep++;continue;}
-    const step=Math.min(budget,dist),nx=h.x+(target.x-h.x)/dist*step,nz=h.z+(target.z-h.z)/dist*step;
-    const near=round.cats.find(c=>(c.state==='ground'||c.state==='eating')&&Math.hypot(c.x-nx,c.z-nz)<1.25&&lineClear(maze,c,{x:nx,z:nz}));
-    if(near){h.catBlocked=true;near.waited=(near.waited||0)+dt;
-      if(near.state==='ground'&&near.waited>7){near.waypoint=null;near.previousCell=null;near.waited=0;aiTimer=0;}
-      break;
-    }
-    h.angle=Math.atan2(target.x-h.x,target.z-h.z);h.x=nx;h.z=nz;h.moving=true;budget-=step;
-    if(step>=dist-.001)aiStep++;
-  }
+  for(const h of huntersIn(round))updatePursuit(round,maze,h,dt);
 }
+
 function finish(result){
   if(!finishRound(round,result,scores))return;
   setView('result');updateScores();try{localStorage.setItem('wrath-maze-scores-v1',JSON.stringify(scores));}catch{}
@@ -171,10 +150,10 @@ function finish(result){
   showModal(resultScreen(result,round,scores));modal.classList.toggle('victory-dialog',result==='escape');
   $('again').onclick=start;$('result-home').onclick=home;
 }
-function capture(){
-  if(!beginCapture(round))return;
-  round.capture.gloat=winGloat();
-  setView('capture');$('capture-word').textContent='UH-OH.';$('capture-caption').textContent='One tiny Stickman. Absolutely no chill.';
+function capture(hunter=round.hunter){
+  if(!beginCapture(round,hunter))return;
+  round.capture.gloat=hunter.weapon?{headline:'DEMOLITION COMPLETE!',line:'One enormous hammer. Absolutely no building permit.'}:winGloat();
+  setView('capture');$('capture-word').textContent='UH-OH.';$('capture-caption').textContent=hunter.weapon?'He brought the big hammer.':'One tiny Stickman. Absolutely no chill.';
   sound(180,.18,'triangle');
 }
 function updateCapture(dt){
@@ -183,11 +162,12 @@ function updateCapture(dt){
   const gloat=round.capture.gloat;
   if(before<2&&t>=2)audio.taunt(round);
   $('capture-word').textContent=t<.9?'UH-OH.':t<2?'BONK!':gloat.headline;
-  $('capture-caption').textContent=t<.9?'One tiny Stickman. Absolutely no chill.':t<2?'A spectacularly unnecessary tackle.':gloat.line;
+  $('capture-caption').textContent=t<.9?(round.capture.weapon?'He brought the big hammer.':'One tiny Stickman. Absolutely no chill.'):t<2?(round.capture.weapon?'A spectacularly unnecessary hammer bonk.':'A spectacularly unnecessary tackle.'):gloat.line;
   if(done)finish('caught');
 }
 function updatePlaying(dt){
   const p=round.player,h=round.hunter;
+  if(isStickmanEnraged(round)&&!round.rageAnnounced){round.rageAnnounced=true;notify('Stickman is losing patience! He is now 25% faster.');}
   round.grace=Math.max(0,round.grace-dt);round.screamCooldown=Math.max(0,round.screamCooldown-dt);
   const left=keys.has('KeyA')||keys.has('ArrowLeft'),right=keys.has('KeyD')||keys.has('ArrowRight');p.angle+=(Number(left)-Number(right))*2.4*dt;
   const f=Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown'));
@@ -203,14 +183,16 @@ function updatePlaying(dt){
   if(foodEvents.includes('fed')){aiTimer=0;const fedCat=round.cats.find(c=>c.id===round.food.catId);notify(fedCat.pickupCooldown>0?`Dinner is done. Kitty needs ${Math.ceil(fedCat.pickupCooldown)}s more rest.`:'A well-fed kitty. Press E nearby to pick them up.');sound(740,.15);}
   roamCats(round,maze,dt);
   updateHunter(dt);
-  if(tickCatComplaint(round,dt))audio.taunt(round,'frustration');
-  if(tickBanter(round,dt,world.stickmanInView(round)))audio.taunt(round);
+  for(const enemy of huntersIn(round)){
+    if(tickCatComplaint(round,dt,enemy))audio.taunt(round,'frustration',enemy);
+    if(tickBanter(round,dt,world.actorInView(enemy,1.85*(enemy.scale||1)),Math.random,enemy))audio.taunt(round,'taunt',enemy);
+  }
   const goal=maze.point(maze.exitIndex);
   // Solid walls must separate nearby start/exit corridors and prevent tagging through stone.
   if(distance(p,goal)<.7&&lineClear(maze,p,goal)){finish('escape');return;}
-  if(distance(p,h)<.55&&lineClear(maze,p,h)){
-    const result=tryCapture(round);if(result==='caught'){capture();return;}
-    if(result==='period'){periodRetort(round);audio.taunt(round);p.idleSeconds=0;aiTimer=0;notify('Tackle cancelled. Stickman is making a dramatic exit!');world.burst(h,0xeaa5c7);}
+  for(const h of huntersIn(round))if(distance(p,h)<(h.weapon?.9:.55)&&lineClear(maze,p,h)){
+    const result=tryCapture(round,Math.random,h);if(result==='caught'){capture(h);return;}
+    if(result==='period'){periodRetort(round,h);audio.taunt(round,'taunt',h);p.idleSeconds=0;aiTimer=0;notify('Tackle cancelled. Stickman is making a dramatic exit!');world.burst(h,0xeaa5c7);}
   }
   if(round.remaining<=0){finish('survived');return;}
 }
@@ -228,7 +210,7 @@ function hud(){
   document.querySelector('[data-action="food"]').disabled=view!=='playing'||round.foodCooldown>0;
   const near=round.cats.find(c=>c.state==='ground'&&!(c.pickupCooldown>0)&&distance(c,round.player)<1.65&&lineClear(maze,c,round.player));
   $('interaction').classList.toggle('hidden',view!=='playing'||!near||!!cat);
-  const h=round.hunter,p=round.player,clear=lineClear(maze,h,p),close=distance(h,p)<9&&clear,spotted=distance(h,p)<24&&sightClear(maze,world.wallStyles,h,p);
+  const p=round.player,h=huntersIn(round).sort((a,b)=>distance(a,p)-distance(b,p))[0],clear=lineClear(maze,h,p),close=distance(h,p)<9&&clear,spotted=distance(h,p)<24&&sightClear(maze,world.wallStyles,h,p);
   $('danger').classList.toggle('hidden',view!=='playing'||!close||!!cat||h.stunned>0);
   $('hunter-status').textContent=view==='capture'?'The chase has reached its ridiculous conclusion.':view==='preview'?'Stickman starts at the exit.':h.panic?.kind==='period'?'Tackle cancelled. Stickman is fleeing!':h.panic?.kind==='scream'?'Stickman is covering his ears!':h.stunned>0?'Stickman is seeing stars…':h.catBlocked?'Stickman is negotiating with a cat.':cat?'Stickman respects the kitty.':close?'Those footsteps are getting closer.':spotted&&!clear?'Stickman spotted beyond the wall.':'Stickman is somewhere in the maze…';
   if(time>toastUntil)$('toast').classList.remove('visible');
@@ -262,8 +244,8 @@ async function selectLevel(id){
     const nextMaze=createMaze({...await response.json(),presentation:await presentation.json()}),oldWorld=world;
     const nextWorld=new World(canvas,nextMaze,oldWorld?.renderer);oldWorld?.dispose();world=nextWorld;maze=nextMaze;selectedLevel=id;
     round=newRound(maze,$('difficulty').value);aimAtRoute();aiRoute=[];aiStep=0;aiTimer=0;setView('home');
-    const level=LEVELS[id];$('level-count').textContent=`${level.number} / 02`;$('home-expedition').textContent=$('hud-expedition').textContent=`EXPEDITION ${level.number}`;
-    $('home-title').innerHTML=`${level.title}<span>↗</span>`;$('home-caption').innerHTML=level.caption;$('home-terrain').textContent=level.terrain;$('hud-title').textContent=level.name;
+    const level=LEVELS[id];$('level-count').textContent=`${level.number} / ${String(Object.keys(LEVELS).length).padStart(2,'0')}`;$('home-expedition').textContent=$('hud-expedition').textContent=`EXPEDITION ${level.number}`;
+    $('home-title').innerHTML=`${level.title}<span>↗</span>`;$('home-caption').innerHTML=level.caption;$('home-terrain').textContent=level.terrain;$('home-company').textContent=`${huntersIn(round).length} menace${round.extraHunters.length?'s':''}. 3 cats.`;$('hud-title').textContent=level.name;
     canvas.setAttribute('aria-label',`3D ${level.name} maze. Use W and S to move, A and D to turn, E to pick up a cat, F to drop cat food, Space to shout, Shift to sprint.`);
     document.querySelectorAll('[data-level]').forEach(b=>{const selected=b.dataset.level===id;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
     $('home-duration').textContent=`${clock(round.remaining)} on the clock`;$('play').innerHTML='<span>Enter the maze</span><b>↗</b>';

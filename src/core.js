@@ -1,5 +1,6 @@
 // Pure game rules and navigation; kept separate from rendering for repeatable tests.
 import {TACITURN_DURATION} from './soundtrack-clock.js';
+import {elevationFor} from './elevation.js';
 export const RULES = Object.freeze({ preview:15, kittyHold:8, kittyPickupCooldown:45, foodCooldown:120, foodArrival:3, foodEating:5, captureDuration:5.2, escapePoints:5, survivePoints:2, capturePoints:5, periodChance:.25, screamCooldown:16, screamDuration:3.5, retreatDuration:5 });
 export const DIFFICULTIES = {
   gentle:{name:'Gentle', playerSpeed:4.7, hunterSpeed:2.7, timeScale:1.2},
@@ -12,6 +13,7 @@ export function createMaze(data) {
   for(let y=0;y<h;y++) for(let x=0;x<w;x++) walk[y*w+x]=data.rows[y][x]==='.'?1:0;
   const toIndex=([x,y])=>y*w+x;
   const maze={...data,walk,startIndex:toIndex(data.start),exitIndex:toIndex(data.exit)};
+  maze.slope=elevationFor(maze);maze.heightAt=maze.slope.heightAt;
   maze.point=(i)=>({x:(i%w-w/2+.5)*s,z:(Math.floor(i/w)-h/2+.5)*s});
   maze.index=(x,z)=>{const cx=Math.floor(x/s+w/2),cy=Math.floor(z/s+h/2);return cx<0||cy<0||cx>=w||cy>=h?-1:cy*w+cx;};
   maze.open=(x,z)=>walk[maze.index(x,z)]===1;
@@ -70,6 +72,7 @@ export function newRound(maze,difficulty='normal'){
   const base=DIFFICULTIES[difficulty]||DIFFICULTIES.normal,hunter=maze.presentation?.hunter||{};
   const settings={...base,hunterSpeed:base.hunterSpeed*(hunter.speedMultiplier||1)};
   return {phase:'preview',preview:RULES.preview,remaining:maze.timeLimit,duration:maze.timeLimit,settings,
+    extraHunters:(maze.presentation?.extraHunters||[]).map(h=>({...h,...maze.point(h.cell[1]*maze.width+h.cell[0]),angle:Math.PI,stunned:0,panic:null,speech:null,hunterSpeed:base.hunterSpeed*h.speedMultiplier})),
     player:{...maze.point(maze.startIndex),angle:0,stamina:100,idleSeconds:0,speech:null},hunter:{...maze.point(maze.exitIndex),angle:Math.PI,stunned:0,panic:null,speech:null,scale:hunter.scale||1,speedMultiplier:hunter.speedMultiplier||1},
     cats:[.07,.42,.74].map((t,id)=>({id,appearance:id===2?'stubby':'ginger',name:id===2?'Stubby':'Kitty',...maze.point(maze.route[Math.floor(maze.route.length*t)]),state:'ground',timer:0,pickupCooldown:0,moving:false})),
     heldCat:null,foodCooldown:0,food:null,capture:null,screamCooldown:0,grace:2,luckUsed:false,elapsed:0,result:null};
@@ -86,13 +89,13 @@ export function finishRound(round,result,scores){
   else if(result==='caught')scores.stickman+=RULES.capturePoints;
   scores.rounds++;return true;
 }
-export function tryCapture(round,random=Math.random){
-  if(round.heldCat!==null||round.grace>0||round.hunter.stunned>0)return 'protected';
-  if(!round.luckUsed){round.luckUsed=true;if(random()<RULES.periodChance){startPanic(round,'period');round.grace=RULES.retreatDuration+.75;return 'period';}}
+export const huntersIn=round=>[round.hunter,...(round.extraHunters||[])];
+export function tryCapture(round,random=Math.random,hunter=round.hunter){
+  if(round.heldCat!==null||round.grace>0||hunter.stunned>0)return 'protected';
+  if(!round.luckUsed){round.luckUsed=true;if(random()<RULES.periodChance){startPanic(round,'period',hunter);round.grace=RULES.retreatDuration+.75;return 'period';}}
   return 'caught';
 }
-export function startPanic(round,kind='scream'){
-  const h=round.hunter;
+export function startPanic(round,kind='scream',h=round.hunter){
   h.stunned=kind==='period'?RULES.retreatDuration:RULES.screamDuration;
   h.panic={kind,elapsed:0,waypoint:null,previousCell:null,settled:false,turnTimer:0};h.moving=false;
   h.angle=Math.atan2(round.player.x-h.x,round.player.z-h.z);
@@ -173,10 +176,10 @@ export function roamCats(round,maze,dt,random=Math.random){
     }
   }
 }
-export function beginCapture(round){
-  if(round.phase!=='playing'||round.result||round.heldCat!==null||round.grace>0||round.hunter.stunned>0)return false;
-  round.phase='capture';round.player.moving=false;round.hunter.moving=false;
-  round.capture={elapsed:0,player:{...round.player},hunter:{...round.hunter}};
+export function beginCapture(round,hunter=round.hunter){
+  if(round.phase!=='playing'||round.result||round.heldCat!==null||round.grace>0||hunter.stunned>0)return false;
+  round.phase='capture';round.player.moving=false;huntersIn(round).forEach(h=>h.moving=false);
+  round.capture={elapsed:0,player:{...round.player},hunter:{...hunter},attackerId:hunter.id||'hunter',weapon:hunter.weapon||null};
   return true;
 }
 export function tickCapture(round,dt){
