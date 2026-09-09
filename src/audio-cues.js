@@ -9,6 +9,13 @@ export function spatialMix(listener,source,range){
   return {distance,gain:fade*fade,pan:distance<.001?0:clamp((-Math.cos(listener.angle)*dx+Math.sin(listener.angle)*dz)/distance,-1,1)*.85};
 }
 
+export function miniatureFootstepGain(round){
+  if(!round.leakyPad)return 1;
+  // Distant, stationary, and attached miniatures do not quiet the nearby runners.
+  const crowd=(round.miniatures||[]).reduce((sum,h)=>sum+(h.state==='chasing'&&h.moving?spatialMix(round.player,h,SOUND_RANGES.hunterStep).gain**2:0),0);
+  return .85/Math.sqrt(1+.15*Math.max(0,crowd-1));
+}
+
 export class AudioCues{
   constructor(random=Math.random){this.random=random;this.round=null;this.reset();}
   reset(){this.positions=new Map();this.steps={player:0,hunter:0};this.meows=new Map();this.menace=4;this.catGap=0;}

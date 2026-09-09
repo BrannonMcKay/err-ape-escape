@@ -1,4 +1,4 @@
-import {AudioCues,spatialMix,SOUND_RANGES} from './audio-cues.js';
+import {AudioCues,spatialMix,SOUND_RANGES,miniatureFootstepGain} from './audio-cues.js';
 import {EFFECTS,synthesizeEffect} from './audio-synth.js';
 
 // Set a slot to one recording URL or an array of variations. Null keeps the synth.
@@ -21,6 +21,7 @@ export class GameAudio{
     this.onChange=onChange;this.random=random;this.cues=new AudioCues(random);
     this.enabled={effects:enabled,music:enabled};this.volume={effects:.8,music:.3};
     this.view='home';this.voices=new Set();this.buffers=new Map();this.recordings=new Map();
+    this.miniatureStepGain=.85;
     this.musicOffset=0;this.defaultMusic={file:MUSIC_ASSET,name:'Taciturn Eternity',credit:MUSIC_CREDIT};this.musicLabel=MUSIC_CREDIT;this.musicStatus='Ready';this.context=null;
   }
   async unlock(){
@@ -121,7 +122,8 @@ export class GameAudio{
     if(!this.enabled.effects||!this.context)return null;
     const mix=source&&listener?spatialMix(listener,source,SOUND_RANGES[kind]||20):{gain:1,pan:0};
     if(mix.gain<=0)return null;
-    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:(source?.miniature?1.8:1)*(.94+this.random()*.12)});
+    const stepGain=kind==='hunterStep'&&source?.miniature?this.miniatureStepGain:1;
+    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain*stepGain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:(source?.miniature?1.8:1)*(.94+this.random()*.12)});
     if(voice)voice.baseGain=EFFECTS[kind].gain;
     return voice;
   }
@@ -155,6 +157,7 @@ export class GameAudio{
     const active=this.enabled.effects&&this.context?.state==='running'&&this.view==='playing'&&!this.hidden;
     const cues=this.cues.update(round,dt,active);
     if(!active){if(this.purr){this.stopVoice(this.purr);this.purr=null;}return;}
+    this.miniatureStepGain=miniatureFootstepGain(round);
     for(const event of cues.events)this.effect(event.kind,event.kind==='playerStep'?null:event.source,round.player);
     if(cues.purring&&!this.purr)this.purr=this.effect('purr');
     if(!cues.purring&&this.purr){this.stopVoice(this.purr);this.purr=null;}
@@ -162,7 +165,8 @@ export class GameAudio{
       if(!voice.actor||voice.stopping)continue;
       if(voice.kind==='meow'&&voice.actor.state!=='ground'){this.stopVoice(voice);continue;}
       const mix=spatialMix(round.player,voice.actor,SOUND_RANGES[voice.kind]||20);
-      voice.gain.gain.setTargetAtTime(voice.baseGain*mix.gain,this.context.currentTime,.04);
+      const stepGain=voice.kind==='hunterStep'&&voice.actor.miniature?this.miniatureStepGain:1;
+      voice.gain.gain.setTargetAtTime(voice.baseGain*mix.gain*stepGain,this.context.currentTime,.04);
       voice.panner.pan.setTargetAtTime(mix.pan,this.context.currentTime,.04);
     }
   }
