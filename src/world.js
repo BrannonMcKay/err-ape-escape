@@ -291,11 +291,9 @@ export class World{
     this.buildFoodBowl();
     this.startMarker=this.makeMarker(maze.point(maze.startIndex),0xd4ef93,'YOU START HERE',-4);
     if(maze.id==='pound-town'){this.startMarker.groundOnly=true;this.startMarker.ring.visible=false;}
-    this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),maze.id==='leaky-pad'?0xff75bb:0xf3b48b,maze.id==='leaky-pad'?'EXIT · FOLLOW THE PINK LIGHT':'EXIT + STICKMAN',4);
-    if(maze.id==='leaky-pad'){
-      this.exitMarker.persistentBeacon=true;this.exitMarker.beam.scale.set(4.5,8,4.5);this.exitMarker.beam.position.y=32;this.exitMarker.beam.material.opacity=.7;this.exitMarker.beam.material.depthWrite=false;
-      const glow=mesh(new THREE.CylinderGeometry(1.2,1.2,64,24,1,true),new THREE.MeshBasicMaterial({color:0xff75bb,transparent:true,opacity:.12,depthWrite:false,side:THREE.DoubleSide}),this.exitMarker.root,0,32,0);glow.castShadow=false;
-    }
+    this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),0xff75bb,maze.id==='leaky-pad'?'EXIT · FOLLOW THE PINK LIGHT':'EXIT + STICKMAN',4);
+    this.exitMarker.persistentBeacon=true;this.exitMarker.beam.scale.set(4.5,8,4.5);this.exitMarker.beam.position.y=32;this.exitMarker.beam.material.opacity=.7;this.exitMarker.beam.material.depthWrite=false;
+    const glow=mesh(new THREE.CylinderGeometry(1.2,1.2,64,24,1,true),new THREE.MeshBasicMaterial({color:0xff75bb,transparent:true,opacity:.12,depthWrite:false,side:THREE.DoubleSide}),this.exitMarker.root,0,32,0);glow.castShadow=false;
     this.markers=[this.startMarker,this.exitMarker];
     for(const h of maze.presentation?.extraHunters||[])this.markers.push(this.makeMarker(maze.point(h.cell[1]*maze.width+h.cell[0]),0xf3b48b,'SLEDGEHAMMER GIANT',4));
     this.orbit=0;this.zoom=1;this.look=new THREE.Vector3();this.temp=new THREE.Vector3();this.lastSize='';
