@@ -19,7 +19,7 @@ export class FootprintTrail {
           const x=old.x+ux*at,z=old.z+uz*at;old.side*=-1;
           const offsets=a.kind==='cat'?[[-.115,-.15],[.115,.15]]:[[old.side*.12,0]];
           for(const [side,forward] of offsets){
-            const px=x+uz*side+ux*forward,pz=z-ux*side+uz*forward;
+            const scale=a.scale||1,px=x+(uz*side+ux*forward)*scale,pz=z+(-ux*side+uz*forward)*scale;
             if(open(px,pz))this.marks.push({x:px,z:pz,angle,kind:a.kind,side:old.side,age:0,scale:a.scale||1});
           }
         }

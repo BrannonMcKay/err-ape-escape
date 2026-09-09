@@ -1,6 +1,7 @@
 // Pure game rules and navigation; kept separate from rendering for repeatable tests.
 import {TACITURN_DURATION} from './soundtrack-clock.js';
 import {elevationFor} from './elevation.js';
+import {miniatureContact} from './leaky-pad.js';
 export const RULES = Object.freeze({ preview:15, kittyHold:8, kittyPickupCooldown:45, foodCooldown:120, foodArrival:3, foodEating:5, captureDuration:5.2, escapePoints:5, survivePoints:2, capturePoints:5, periodChance:.25, screamCooldown:16, screamDuration:3.5, retreatDuration:5 });
 export const DIFFICULTIES = {
   gentle:{name:'Gentle', playerSpeed:4.7, hunterSpeed:2.7, timeScale:1.2},
@@ -19,7 +20,7 @@ export function createMaze(data) {
   maze.open=(x,z)=>walk[maze.index(x,z)]===1;
   maze.route=findPath(maze,maze.startIndex,maze.exitIndex);
   if(!maze.route.length) throw new Error('The maze entrance and exit are disconnected.');
-  maze.timeLimit=TACITURN_DURATION;
+  maze.timeLimit=data.presentation?.soundtrack?.duration||TACITURN_DURATION;
   return maze;
 }
 export function findPath(maze,start,end,blocked=null) {
@@ -72,6 +73,7 @@ export function newRound(maze,difficulty='normal'){
   const base=DIFFICULTIES[difficulty]||DIFFICULTIES.normal,hunter=maze.presentation?.hunter||{};
   const settings={...base,hunterSpeed:base.hunterSpeed*(hunter.speedMultiplier||1)};
   return {phase:'preview',preview:RULES.preview,remaining:maze.timeLimit,duration:maze.timeLimit,settings,
+    leakyPad:maze.id==='leaky-pad',miniatures:[],
     extraHunters:(maze.presentation?.extraHunters||[]).map(h=>({...h,...maze.point(h.cell[1]*maze.width+h.cell[0]),angle:Math.PI,stunned:0,panic:null,speech:null,hunterSpeed:base.hunterSpeed*h.speedMultiplier})),
     player:{...maze.point(maze.startIndex),angle:0,stamina:100,idleSeconds:0,speech:null},hunter:{...maze.point(maze.exitIndex),angle:Math.PI,stunned:0,panic:null,speech:null,scale:hunter.scale||1,speedMultiplier:hunter.speedMultiplier||1},
     cats:[.07,.42,.74].map((t,id)=>({id,appearance:id===2?'stubby':'ginger',name:id===2?'Stubby':'Kitty',...maze.point(maze.route[Math.floor(maze.route.length*t)]),state:'ground',timer:0,pickupCooldown:0,moving:false})),
@@ -89,9 +91,10 @@ export function finishRound(round,result,scores){
   else if(result==='caught')scores.stickman+=RULES.capturePoints;
   scores.rounds++;return true;
 }
-export const huntersIn=round=>[round.hunter,...(round.extraHunters||[])];
+export const huntersIn=round=>round.leakyPad?round.miniatures.filter(h=>h.state==='chasing'):[round.hunter,...(round.extraHunters||[])];
 export function tryCapture(round,random=Math.random,hunter=round.hunter){
   if(round.heldCat!==null||round.grace>0||hunter.stunned>0)return 'protected';
+  if(hunter.miniature)return miniatureContact(round,hunter,random);
   if(!round.luckUsed){round.luckUsed=true;if(random()<RULES.periodChance){startPanic(round,'period',hunter);round.grace=RULES.retreatDuration+.75;return 'period';}}
   return 'caught';
 }
@@ -178,6 +181,7 @@ export function roamCats(round,maze,dt,random=Math.random){
 }
 export function beginCapture(round,hunter=round.hunter){
   if(round.phase!=='playing'||round.result||round.heldCat!==null||round.grace>0||hunter.stunned>0)return false;
+  if(round.leakyPad&&round.miniatures.filter(h=>h.state==='attached').length<3)return false;
   round.phase='capture';round.player.moving=false;huntersIn(round).forEach(h=>h.moving=false);
   round.capture={elapsed:0,player:{...round.player},hunter:{...hunter},attackerId:hunter.id||'hunter',weapon:hunter.weapon||null};
   return true;

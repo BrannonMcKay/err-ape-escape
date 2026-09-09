@@ -4,6 +4,8 @@ export const EFFECTS={
   playerStep:{duration:.12,gain:.1},hunterStep:{duration:.23,gain:.72},
   menace:{duration:1.45,gain:.38},taunt:{duration:.95,gain:.5},scream:{duration:.85,gain:.48},greeting:{duration:.65,gain:.4},
   frustration:{duration:1.05,gain:.5},
+  angryGirl:{duration:.68,gain:.48},
+  splash:{duration:1.1,gain:.6},
 };
 
 // Code-generated placeholders. Replaced by recordings through AUDIO_ASSETS in audio.js.
@@ -14,7 +16,16 @@ export function synthesizeEffect(kind,sampleRate,random=Math.random){
   for(let i=0;i<samples.length;i++){
     const t=i/sampleRate,u=t/definition.duration,noise=random()*2-1;
     lowNoise=lowNoise*.94+noise*.06;let value=0;
-    if(kind==='meow'){
+    if(kind==='angryGirl'){
+      // A bright, playful, annoyed "hmph!"; deliberately nonverbal.
+      const f=330+155*Math.sin(Math.PI*u)-80*u+12*Math.sin(TAU*22*t);
+      phase+=TAU*f/sampleRate;
+      const hum=Math.sin(phase)+.42*Math.sin(phase*2)+.18*Math.sin(phase*3);
+      const puff=lowNoise*.7*Math.exp(-(((u-.73)/.15)**2));
+      value=(hum*.25*Math.sin(Math.PI*u)**.6+puff)*(.8+.2*Math.sin(TAU*9*t));
+    }else if(kind==='splash'){
+      value=(lowNoise*2.2+noise*.22)*Math.sin(Math.PI*Math.min(1,u*4))*Math.exp(-u*3.5)+Math.sin(TAU*(180-110*u)*t)*.12*Math.exp(-u*8);
+    }else if(kind==='meow'){
       const f=t<.16?490+t*2000:810*Math.exp(-(t-.16)*1.65);
       phase+=TAU*f/sampleRate;
       const vibrato=.06*Math.sin(TAU*7*t),mouth=.5+.5*Math.sin(Math.PI*u);

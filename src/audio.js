@@ -21,7 +21,7 @@ export class GameAudio{
     this.onChange=onChange;this.random=random;this.cues=new AudioCues(random);
     this.enabled={effects:enabled,music:enabled};this.volume={effects:.8,music:.3};
     this.view='home';this.voices=new Set();this.buffers=new Map();this.recordings=new Map();
-    this.musicOffset=0;this.musicLabel=MUSIC_CREDIT;this.musicStatus='Ready';this.context=null;
+    this.musicOffset=0;this.defaultMusic={file:MUSIC_ASSET,name:'Taciturn Eternity',credit:MUSIC_CREDIT};this.musicLabel=MUSIC_CREDIT;this.musicStatus='Ready';this.context=null;
   }
   async unlock(){
     if(!this.context){
@@ -70,7 +70,19 @@ export class GameAudio{
     }
   }
   setHidden(hidden){this.hidden=hidden;if(hidden)this.stopEffects();this.syncMusic();}
-  stopEffects(){for(const voice of this.voices)this.stopVoice(voice);this.purr=null;this.cues.reset();}
+  stopEffects(){for(const voice of this.voices)this.stopVoice(voice);this.purr=null;this.cues.reset();if(this.speaking){globalThis.speechSynthesis?.cancel();this.speaking=false;}}
+  speakToss(hunter){
+    if(!this.enabled.effects||this.hidden||this.view!=='playing')return;
+    this.effect('angryGirl');
+    if(!globalThis.speechSynthesis||!globalThis.SpeechSynthesisUtterance){this.effect('taunt',hunter,this.clockRound.player);return;}
+    globalThis.speechSynthesis.cancel();this.speaking=true;
+    for(const [text,pitch,rate] of [[hunter.speech.text,1.85,1.3]]){
+      const line=new SpeechSynthesisUtterance(text);line.pitch=pitch;line.rate=rate;line.volume=this.volume.effects;line.lang='en-US';
+      // Prefer an installed voice, so the game does not depend on a speech service.
+      const voice=speechSynthesis.getVoices().find(v=>v.localService&&v.lang.startsWith('en'));if(voice)line.voice=voice;
+      speechSynthesis.speak(line);
+    }
+  }
   stopVoice(voice){
     if(voice.stopping)return;voice.stopping=true;
     const now=this.context.currentTime;voice.gain.gain.cancelScheduledValues(now);voice.gain.gain.setTargetAtTime(0,now,.008);
@@ -109,7 +121,7 @@ export class GameAudio{
     if(!this.enabled.effects||!this.context)return null;
     const mix=source&&listener?spatialMix(listener,source,SOUND_RANGES[kind]||20):{gain:1,pan:0};
     if(mix.gain<=0)return null;
-    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:.94+this.random()*.12});
+    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:(source?.miniature?1.8:1)*(.94+this.random()*.12)});
     if(voice)voice.baseGain=EFFECTS[kind].gain;
     return voice;
   }
@@ -149,15 +161,15 @@ export class GameAudio{
     for(const voice of this.voices){
       if(!voice.actor||voice.stopping)continue;
       if(voice.kind==='meow'&&voice.actor.state!=='ground'){this.stopVoice(voice);continue;}
-      const mix=spatialMix(round.player,voice.actor,SOUND_RANGES[voice.kind]);
+      const mix=spatialMix(round.player,voice.actor,SOUND_RANGES[voice.kind]||20);
       voice.gain.gain.setTargetAtTime(voice.baseGain*mix.gain,this.context.currentTime,.04);
       voice.panner.pan.setTargetAtTime(mix.pan,this.context.currentTime,.04);
     }
   }
   async loadMusic(){
     if(!this.musicPromise)this.musicPromise=(async()=>{
-      this.musicStatus='Loading Taciturn Eternity…';this.onChange();
-      const response=await fetch(MUSIC_ASSET);if(!response.ok)throw new Error('Taciturn Eternity could not load.');
+      this.musicStatus=`Loading ${this.defaultMusic.name}…`;this.onChange();
+      const response=await fetch(this.defaultMusic.file);if(!response.ok)throw new Error(`${this.defaultMusic.name} could not load.`);
       this.musicBuffer=await this.context.decodeAudioData(await response.arrayBuffer());
       this.retimeRound();
       this.musicStatus='Ready · original Mimesis recording';this.onChange();
@@ -194,8 +206,14 @@ export class GameAudio{
     this.enabled.music=true;this.updateBus('music');this.syncMusic();this.onChange();
   }
   async restoreMusic(){
-    await this.unlock();this.stopMusic();this.musicBuffer=null;this.musicOffset=0;this.musicPromise=null;this.musicLabel=MUSIC_CREDIT;
+    await this.unlock();if(this.musicPromise)await this.musicPromise.catch(()=>{});this.stopMusic();this.musicBuffer=null;this.musicOffset=0;this.musicPromise=null;this.musicLabel=this.defaultMusic.credit;
     await this.loadMusic();this.enabled.music=true;this.updateBus('music');this.syncMusic();this.onChange();
+  }
+  async setDefaultMusic(track){
+    if(this.musicPromise)await this.musicPromise.catch(()=>{});
+    this.stopMusic();this.clockRound=null;this.defaultMusic=track||{file:MUSIC_ASSET,name:'Taciturn Eternity',credit:MUSIC_CREDIT};
+    this.musicBuffer=null;this.musicPromise=null;this.musicOffset=0;this.musicLabel=this.defaultMusic.credit;this.musicStatus='Ready';this.onChange();
+    if(this.context&&this.enabled.music)await this.loadMusic();
   }
   snapshot(){return {context:this.context?.state||'not started',effects:this.enabled.effects,music:this.enabled.music,voices:this.voices.size,purring:!!this.purr,musicPlaying:!!this.musicSource,musicFading:!!this.fadeEnd,musicGain:this.buses?.music.gain.value||0,musicPosition:this.musicBuffer?Math.min(this.musicBuffer.duration,this.musicOffset+(this.musicSource?this.context.currentTime-this.musicStart:0)):0,musicDuration:this.musicBuffer?.duration||0,musicStatus:this.musicStatus};}
 }

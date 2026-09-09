@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import {huntersIn} from './core.js';
+import {padMaterials,PadWorld} from './pad-world.js';
 import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
 import {terrainBoxes} from './terrain-geometry.js';
 import {updateRubbleShadows} from './city-detail.js';
@@ -101,7 +102,7 @@ export function makeRunner(){
   root.scale.setScalar(.85);
   let turn=0,idleBlend=0,photoBlend=0;
   const dampAngle=(from,to,f)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*f;
-  return {root,body,carry,get photoBlend(){return photoBlend;},animate(t,moving,holding,seconds=0,dt=1/60,cameraOffset=Math.PI,reducedMotion=false){
+  return {root,body,carry,hairLocks:strands,get photoBlend(){return photoBlend;},animate(t,moving,holding,seconds=0,dt=1/60,cameraOffset=Math.PI,reducedMotion=false){
     const idle=idlePerformance(seconds,holding,reducedMotion),ease=1-Math.exp(-12*dt);
     idleBlend+=(idle.blend-idleBlend)*ease;photoBlend+=((idle.mode==='cuddle'?idle.blend:0)-photoBlend)*ease;
     const facing=idle.mode==='cuddle'?cameraOffset:idle.yaw;
@@ -131,6 +132,8 @@ export function makeRunner(){
     carry.position.set(-.18*photoBlend,.96+.11*photoBlend,.36+.04*photoBlend);carry.rotation.z=.08*photoBlend;
     expression.material.map=idleBlend>.2?happyTexture:normalTexture;
     strands.forEach((s,i)=>{s.rotation.x=.1+Math.sin(t*(moving?9:2)+i*.8)*(moving?.25:.05)+idle.twirl*.32*idleBlend;s.rotation.z=idle.mode==='dance'?Math.sin(idle.beat+i*.45)*.09*idleBlend:0;});
+  },throwTiny(remaining){
+    const swing=Math.sin(Math.PI*(1-remaining/.85));limbs[3].rotation.z=-1.9*swing;limbs[3].rotation.x=-1.1*swing;elbows[1].rotation.x=-.8*swing;body.rotation.z=-.12*swing;expression.material.map=happyTexture;
   },tackle(t){
     body.rotation.x=body.rotation.y=0;body.position.x=0;expression.material.map=normalTexture;
     const fall=THREE.MathUtils.smoothstep(t,.85,1.6);body.rotation.z=-fall*1.38;body.position.y=fall*.18;
@@ -150,6 +153,11 @@ export function makeStickman(weapon=null){
   ball(head,new THREE.MeshBasicMaterial({color:color.ink,side:THREE.BackSide}),0,0,0,.435);ball(head,white,0,0,.025,.403,.403,.412);
   const smile=face(head,'smile',.37,0,.442),pout=face(head,'pout',.37,0,.444),grin=face(head,'grin',.40,0,.445),horror=face(head,'horrified',.40,0,.446);pout.visible=false;grin.visible=false;horror.visible=false;
   const ears=new THREE.Group(),flail=new THREE.Group();body.add(ears,flail);ears.visible=flail.visible=false;
+  const cling=new THREE.Group();body.add(cling);cling.visible=false;
+  for(const side of [-1,1]){
+    rod(cling,ink,[0,1.37,0],[side*.36,1.74,.12],.04);rod(cling,ink,[side*.36,1.74,.12],[side*.28,2.17,.45],.04);
+    ball(cling,ink,side*.28,2.17,.45,.06);for(let i=-1;i<=1;i++)rod(cling,ink,[side*.28,2.17,.45],[side*(.26+i*.05),2.2,.54],.018);
+  }
   for(const side of [-1,1]){
     rod(ears,ink,[0,1.37,0],[side*.63,1.43,.06],.04);rod(ears,ink,[side*.63,1.43,.06],[side*.40,1.86,.08],.04);
     ball(ears,ink,side*.40,1.86,.08,.065);
@@ -174,12 +182,13 @@ export function makeStickman(weapon=null){
       for(const [n,a,b] of [[side*2,shoulder,elbow],[side*2+1,elbow,hand]]){const v=b.clone().sub(a),m=gripSegments[n];m.position.copy(a).add(b).multiplyScalar(.5);m.scale.y=v.length();m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());}
     }
   }
-  return {root,faceCamera:weapon?STICKMAN_TUNING.giantFaceCamera:STICKMAN_TUNING.faceCamera,lookAtCamera(camera,enraged){
-    white.color.copy(enraged?rageFace:calmFace);
+  return {root,faceColor:null,faceCamera:weapon?STICKMAN_TUNING.giantFaceCamera:STICKMAN_TUNING.faceCamera,lookAtCamera(camera,enraged){
+    if(this.faceColor!==null)white.color.set(this.faceColor);else white.color.copy(enraged?rageFace:calmFace);
     // The parent may be leaning, running, or tackling. lookAt compensates for it.
     if(this.faceCamera)head.lookAt(camera.position);else head.quaternion.identity();
   },animate(t,moving,stunned,panic=null,speedMultiplier=1){
     stunned=!!stunned;
+    cling.visible=false;
     const rate=(panic?23:12)*speedMultiplier,a=moving?Math.sin(t*rate)*(panic?1.05:.7):Math.sin(t*3)*.05;
     limbs.forEach(l=>l.rotation.set(0,0,0));limbs[0].rotation.x=a;limbs[2].rotation.x=-a;limbs[1].rotation.x=-a;limbs[3].rotation.x=a;
     limbs[1].visible=limbs[3].visible=!panic;ears.visible=panic?.kind==='scream';flail.visible=panic?.kind==='period';flail.rotation.z=Math.sin(t*17)*.07;
@@ -187,7 +196,12 @@ export function makeStickman(weapon=null){
     body.rotation.set(panic&&moving?.18:0,0,panic?Math.sin(t*18)*.065:stunned?Math.sin(t*6)*.15:0);body.position.y=moving?Math.abs(Math.sin(t*rate))*(panic?.13:.07):0;
     smile.visible=!stunned&&!panic;pout.visible=stunned&&!panic;horror.visible=!!panic;grin.visible=false;
     poseGrip();
+  },hang(t){
+    limbs[1].visible=limbs[3].visible=false;cling.visible=true;ears.visible=flail.visible=false;
+    body.position.y=0;body.rotation.set(0,0,Math.sin(t*3)*.035);limbs[0].rotation.x=.12+Math.sin(t*3)*.13;limbs[2].rotation.x=-.1-Math.sin(t*3)*.12;
+    smile.visible=true;pout.visible=horror.visible=grin.visible=false;
   },tackle(t){
+    cling.visible=false;
     smile.visible=false;pout.visible=false;horror.visible=false;grin.visible=true;ears.visible=flail.visible=false;limbs[1].visible=limbs[3].visible=true;
     const charge=THREE.MathUtils.smoothstep(t,.35,.95),recover=THREE.MathUtils.smoothstep(t,1.05,1.7);
     body.rotation.x=.6*charge*(1-recover);body.rotation.z=-.09*(1-recover);
@@ -204,7 +218,7 @@ export function makeStickman(weapon=null){
     // Recover into a sideways shoulder salute, clear of his head and grin.
     // Both stick arms follow the shaft through the wind-up, bonk and victory pose.
     poseGrip(recover);
-  },reset(){limbs.forEach(l=>{l.rotation.set(0,0,0);l.visible=true;});body.rotation.set(0,0,0);head.quaternion.identity();white.color.copy(calmFace);ears.visible=flail.visible=horror.visible=false;}};
+  },reset(){limbs.forEach(l=>{l.rotation.set(0,0,0);l.visible=true;});body.rotation.set(0,0,0);head.quaternion.identity();white.color.copy(calmFace);ears.visible=flail.visible=horror.visible=cling.visible=false;}};
 }
 function makeCat(kind='ginger'){
   const stubby=kind==='stubby',g=new THREE.Group(),orange=mat(stubby?0x9a8a70:0xf4b765),white=mat(stubby?0xf5f1e5:0xffe9c9),ink=mat(color.ink),pink=mat(0xdb9291);
@@ -261,18 +275,23 @@ export class World{
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.25;
     this.camera=new THREE.PerspectiveCamera(45,1,.06,700);
-    this.scene.add(new THREE.HemisphereLight(0xeaf5ff,maze.id==='snowman'?0x829eb6:0x5f6040,2.6));
+    this.ambient=new THREE.HemisphereLight(0xeaf5ff,maze.id==='snowman'?0x829eb6:0x5f6040,2.6);this.scene.add(this.ambient);
     const sun=new THREE.DirectionalLight(0xffebc9,3);sun.position.set(-60,110,40);sun.castShadow=true;
     sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-90,right:90,top:90,bottom:-90,near:1,far:270});sun.shadow.bias=-.001;sun.shadow.normalBias=.12;this.scene.add(sun);
     this.light=sun;this.buildMaze();this.buildScenery();this.buildArtwork();
     if(maze.id==='snowman')this.weather=new WinterWeather(this.scene,maze);
     this.runner=makeRunner();this.stickman=makeStickman();this.scene.add(this.runner.root,this.stickman.root);
+    this.miniModels=new Map();if(maze.id==='leaky-pad')this.stickman.root.visible=false;
     this.extraStickmen=(maze.presentation?.extraHunters||[]).map(h=>{const model=makeStickman(h.weapon);this.scene.add(model.root);return model;});
     this.cats=[makeCat(),makeCat(),makeCat('stubby')];this.cats.forEach(c=>this.scene.add(c.root));
     this.buildFoodBowl();
     this.startMarker=this.makeMarker(maze.point(maze.startIndex),0xd4ef93,'YOU START HERE',-4);
     if(maze.id==='pound-town'){this.startMarker.groundOnly=true;this.startMarker.ring.visible=false;}
-    this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),0xf3b48b,'EXIT + STICKMAN',4);
+    this.exitMarker=this.makeMarker(maze.point(maze.exitIndex),maze.id==='leaky-pad'?0xff75bb:0xf3b48b,maze.id==='leaky-pad'?'EXIT · FOLLOW THE PINK LIGHT':'EXIT + STICKMAN',4);
+    if(maze.id==='leaky-pad'){
+      this.exitMarker.persistentBeacon=true;this.exitMarker.beam.scale.set(4.5,8,4.5);this.exitMarker.beam.position.y=32;this.exitMarker.beam.material.opacity=.7;this.exitMarker.beam.material.depthWrite=false;
+      const glow=mesh(new THREE.CylinderGeometry(1.2,1.2,64,24,1,true),new THREE.MeshBasicMaterial({color:0xff75bb,transparent:true,opacity:.12,depthWrite:false,side:THREE.DoubleSide}),this.exitMarker.root,0,32,0);glow.castShadow=false;
+    }
     this.markers=[this.startMarker,this.exitMarker];
     for(const h of maze.presentation?.extraHunters||[])this.markers.push(this.makeMarker(maze.point(h.cell[1]*maze.width+h.cell[0]),0xf3b48b,'SLEDGEHAMMER GIANT',4));
     this.orbit=0;this.zoom=1;this.look=new THREE.Vector3();this.temp=new THREE.Vector3();this.lastSize='';
@@ -317,8 +336,8 @@ export class World{
       rects.forEach((r,i)=>{m.compose(new THREE.Vector3((r.x+r.w/2-maze.width/2)*s,y,(r.y+r.h/2-maze.height/2)*s),q,new THREE.Vector3(r.w*s,height,r.h*s));m.elements[1]=maze.slope.x*r.w*s;m.elements[9]=maze.slope.z*r.h*s;m.elements[13]+=maze.heightAt(m.elements[12],m.elements[14]);batch.setMatrixAt(i,m);if(variation)batch.setColorAt(i,new THREE.Color().setScalar(.91+((r.x*13+r.y*7)%19)/100));});
       batch.castShadow=height>1;batch.receiveShadow=true;this.scene.add(batch);return batch;
     };
-    const terrain=maze.presentation?.theme?.id==='mountain-seasons'?mountainMaterials(maze):maze.id==='snowman'?winterMaterials(maze):maze.id==='pound-town'?cityMaterials():null;
-    const wallMat=this.cutawayMaterial(terrain?.wall||rock(color.stone)),topMat=this.cutawayMaterial(terrain?.top||rock(color.top)),sideMat=rock(terrain?0x554532:0x514859);
+    const terrain=maze.presentation?.theme?.id==='mountain-seasons'?mountainMaterials(maze):maze.id==='snowman'?winterMaterials(maze):maze.id==='pound-town'?cityMaterials():maze.id==='leaky-pad'?(this.padMaterials=padMaterials(maze)):null;
+    const wallMat=this.cutawayMaterial(terrain?.wall||rock(color.stone)),topMat=this.cutawayMaterial(terrain?.top||rock(color.top)),sideMat=maze.id==='leaky-pad'?mat(0xc4d4cf):rock(terrain?0x554532:0x514859);
     const h=maze.presentation?.wallHeights||{tall:3.4,low:1.05,sill:.65,lintel:2.75};
     const materials=[wallMat,wallMat,topMat,wallMat,wallMat,wallMat];
     const styleRects=style=>rectangles(maze,(c,x,y)=>c==='#'&&this.wallStyles[y*maze.width+x]===style);
@@ -337,14 +356,16 @@ export class World{
     const posts=windows.flatMap(r=>r.h>r.w?[{...r,h:.18},{...r,y:r.y+r.h-.18,h:.18}]:[{...r,w:.18},{...r,x:r.x+r.w-.18,w:.18}]);
     create(posts,h.lintel-h.sill,(h.lintel+h.sill)/2,this.cutawayMaterial(mat(0x827577)));
     this.floor=create(rectangles(maze,c=>c!== ' '),3,-1.56,[sideMat,sideMat,terrain?.ground||rock(color.path),sideMat,sideMat,sideMat]);
+    if(maze.id==='leaky-pad'){this.floor.castShadow=false;this.walls.castShadow=this.lowWalls.castShadow=true;}
     // Small pebbles give the paper-derived paths a grounded, rocky surface.
     const pebbleGeo=new THREE.DodecahedronGeometry(.06),pebbleMat=mat(terrain?0xffffff:0x95808b);
-    const spots=[];if(maze.id!=='snowman')for(let i=0;i<maze.walk.length;i+=23)if(maze.walk[i])spots.push(maze.point(i));
+    const spots=[];if(!['snowman','leaky-pad'].includes(maze.id))for(let i=0;i<maze.walk.length;i+=23)if(maze.walk[i])spots.push(maze.point(i));
     const pebbles=new THREE.InstancedMesh(pebbleGeo,pebbleMat,spots.length),m=new THREE.Matrix4();
     spots.forEach((p,i)=>{m.makeTranslation(p.x,maze.heightAt(p.x,p.z)+.01,p.z);pebbles.setMatrixAt(i,m);if(terrain)pebbles.setColorAt(i,new THREE.Color(terrainAt(maze,p.x,p.z).snow>.5?0xe1eef0:0x887052));});this.scene.add(pebbles);
   }
   buildScenery(){
     const scene=this.scene;
+    if(this.maze.id==='leaky-pad'){this.pad=new PadWorld(this);return;}
     if(this.maze.id==='snowman'){buildWinterDecor(this);return;}
     if(this.maze.id==='pound-town'){buildCityDecor(this);return;}
     const seasonal=this.maze.presentation?.theme?.id==='mountain-seasons';
@@ -426,7 +447,7 @@ export class World{
     const g=new THREE.Group();g.position.set(p.x,this.maze.heightAt(p.x,p.z),p.z);this.scene.add(g);
     const ring=mesh(new THREE.TorusGeometry(.53,.09,8,36),new THREE.MeshBasicMaterial({color:c}),g,0,.13,0);ring.rotation.x=Math.PI/2;
     const beam=mesh(new THREE.CylinderGeometry(.08,.08,8,8),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.7}),g,0,4,0);beam.castShadow=false;
-    const sign=label(text,c===0xd4ef93?'#d4ef93':'#f3b48b');sign.position.set(offset,10+Math.abs(offset)*.2,0);g.add(sign);
+    const sign=label(text,c===0xd4ef93?'#d4ef93':c===0xff75bb?'#ff75bb':'#f3b48b');sign.position.set(offset,10+Math.abs(offset)*.2,0);g.add(sign);
     return {root:g,ring,beam,sign};
   }
   burst(p,c=0xd4ef93){
@@ -437,6 +458,10 @@ export class World{
   resize(){const c=this.renderer.domElement,w=c.clientWidth,h=c.clientHeight,key=`${w}:${h}`;if(key!==this.lastSize){this.lastSize=key;this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}}
   overviewPose(top=false){
     const aspect=this.camera.aspect;
+    if(this.maze.id==='leaky-pad'){
+      const fit=Math.max(1,.95/Math.max(.3,aspect)),a=.28+this.orbit;
+      return top?{position:new THREE.Vector3(0,Math.max(278,215/Math.max(.4,aspect)),.01),target:new THREE.Vector3(0,0,0)}:{position:new THREE.Vector3(Math.sin(a)*105,245,Math.cos(a)*165).multiplyScalar(this.zoom*fit),target:new THREE.Vector3(0,0,3)};
+    }
     const height=Math.max(165,118/Math.max(.6,aspect));
     if(top&&this.maze.id==='snowman'){const small=this.renderer.domElement.clientWidth<700;return {position:new THREE.Vector3(0,small?330:230,small?30.01:.01),target:new THREE.Vector3(0,0,small?30:0)};}
     if(top){const small=this.renderer.domElement.clientWidth<700;return {position:new THREE.Vector3(0,small?315:height*1.23,small?48.01:8.01),target:new THREE.Vector3(0,0,small?48:8)};}
@@ -462,12 +487,19 @@ export class World{
   updateSpeech(round,view){
     const rect=this.renderer.domElement.getBoundingClientRect(),active=round.phase==='playing'&&(view==='playing'||view==='paused');
     const paired=active&&round.player.speech&&round.hunter.speech&&this.stickmanInView(round);
-    const boxes=[];
+    const boxes=[];let departingCount=0;
     for(const who of Object.keys(this.speech)){
-      const actor=round[who]||round.extraHunters?.find(h=>h.id===who),bubble=this.speech[who],shown=active&&!!actor.speech&&this.actorInView(actor,who==='player'?1.5:1.85*(actor.scale||1));
+      const actor=round[who]||round.extraHunters?.find(h=>h.id===who)||round.miniatures?.find(h=>h.id===who),bubble=this.speech[who],departing=actor?.miniature&&['flying','removed'].includes(actor.state),shown=active&&!!actor?.speech&&(departing||this.actorInView(actor,who==='player'?1.5:1.85*(actor.scale||1)));
       bubble.hidden=!shown;if(!shown)continue;
       if(bubble.textContent!==actor.speech.text)bubble.textContent=actor.speech.text;
-      const pos=new THREE.Vector3(actor.x,this.maze.heightAt(actor.x,actor.z)+(who==='player'?1.84:2.34*(actor.scale||1)),actor.z).project(this.camera);
+      const pos=new THREE.Vector3(actor.x,this.maze.heightAt(actor.x,actor.z)+(actor.y||0)+(who==='player'?1.84:2.34*(actor.scale||1)),actor.z).project(this.camera);
+      if(departing&&(actor.state==='removed'||pos.z<=-1||pos.z>=1||Math.abs(pos.x)>.9||Math.abs(pos.y)>.9))actor.captionDeparted=true;
+      const pinned=departing&&actor.captionDeparted;bubble.classList.toggle('departing-speech',!!pinned);
+      if(pinned){
+        const half=bubble.offsetWidth/2+8,y=rect.top+140+bubble.offsetHeight+departingCount*(bubble.offsetHeight+18);departingCount++;
+        bubble.style.left=`${rect.right-half-18}px`;bubble.style.top=`${Math.min(rect.bottom-20,y)}px`;continue;
+      }
+      if(pos.z<=-1||pos.z>=1){bubble.hidden=true;continue;}
       const half=bubble.offsetWidth/2+8;
       const anchor=rect.left+(pos.x+1)/2*rect.width,offset=paired?(who==='player'?-110:70):0;
       const x=THREE.MathUtils.clamp(anchor+offset,rect.left+half,rect.right-half);
@@ -481,6 +513,12 @@ export class World{
   }
   capturePose(round){
     const c=round.capture,p=c.player,h=c.hunter,t=c.elapsed;
+    if(round.leakyPad){
+      this.runner.tackle(t);const ground=this.maze.heightAt(p.x,p.z),fall=THREE.MathUtils.smoothstep(t,.85,1.6);
+      for(const tiny of round.miniatures.filter(m=>m.state==='attached')){const model=this.miniModels.get(tiny.id);if(!model)continue;model.root.position.set(p.x+(tiny.attachment-1)*.3,ground+.4-fall*.25,p.z+.2);model.tackle(t);}
+      this.cutaway.center.value.set(p.x,p.z);this.cutaway.ground.value=ground;
+      return {position:new THREE.Vector3(p.x+3.5,ground+2.5,p.z+3),target:new THREE.Vector3(p.x,ground+.7,p.z)};
+    }
     const giant=h.scale||1,ground=this.maze.heightAt(p.x,p.z),model=c.attackerId==='hunter'||!c.attackerId?this.stickman:this.extraStickmen[round.extraHunters.findIndex(h=>h.id===c.attackerId)];
     const len=Math.hypot(p.x-h.x,p.z-h.z)||1,dx=(p.x-h.x)/len,dz=(p.z-h.z)/len;
     const approach=THREE.MathUtils.smoothstep(t,.35,.98),settle=THREE.MathUtils.smoothstep(t,1.05,1.8);
@@ -507,14 +545,33 @@ export class World{
     }
     if(!capture&&this.wasCapture){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());}this.wasCapture=capture;
     if(round){
-      if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.round=round;}
+      if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.pad?.clear();this.miniModels.forEach(m=>m.root.visible=false);this.round=round;}
       const {player:p,hunter:h}=round;this.runner.root.position.set(p.x,this.maze.heightAt(p.x,p.z),p.z);this.runner.root.rotation.y=p.angle;
       const cameraOffset=Math.atan2(this.camera.position.x-p.x,this.camera.position.z-p.z)-p.angle;
       if(view!=='paused')this.runner.animate(time,!!p.moving,round.heldCat!==null,view==='playing'?p.idleSeconds:0,dt,cameraOffset,this.reducedMotion.matches);
-      huntersIn(round).forEach((h,i)=>{const model=i?this.extraStickmen[i-1]:this.stickman;
+      if(p.tossRemaining>0)this.runner.throwTiny(p.tossRemaining);
+      if(!round.leakyPad)huntersIn(round).forEach((h,i)=>{const model=i?this.extraStickmen[i-1]:this.stickman;
         model.root.position.set(h.x,this.maze.heightAt(h.x,h.z),h.z);model.root.scale.setScalar(h.scale||1);model.root.rotation.y=h.angle;
         if(view!=='paused')model.animate(time,!!h.moving,h.stunned>0||round.heldCat!==null||h.catBlocked,h.panic,stickmanSpeedMultiplier(round));
       });
+      if(round.leakyPad)for(const h of round.miniatures){
+        let model=this.miniModels.get(h.id);
+        if(!model){model=makeStickman();model.faceColor=0xff344d;this.miniModels.set(h.id,model);this.scene.add(model.root);
+          const bubble=document.createElement('div');bubble.className='character-speech';bubble.setAttribute('role','status');bubble.setAttribute('aria-label','Tiny Stickman says');bubble.hidden=true;document.body.append(bubble);this.speech[h.id]=bubble;
+        }
+        const hanging=h.state==='attached'&&!capture;
+        if(hanging){
+          const lock=this.runner.hairLocks[[0,6,3][h.attachment]];if(model.root.parent!==lock)lock.add(model.root);
+          model.root.position.set(0,-1.13,-.38);model.root.scale.setScalar(h.scale/this.runner.root.scale.x);model.root.rotation.set(0,0,0);
+        }else{
+          if(model.root.parent!==this.scene)this.scene.add(model.root);
+          model.root.position.set(h.x,this.maze.heightAt(h.x,h.z)+(h.y||0),h.z);model.root.scale.setScalar(h.scale);model.root.rotation.set(h.state==='flying'?h.flightElapsed*3.5:0,h.angle,h.state==='flying'?h.flightElapsed*2.5:0);
+        }
+        model.root.visible=h.state!=='removed';
+        if(view!=='paused')model.animate(round.elapsed,!!h.moving,h.stunned>0,h.panic,h.speedMultiplier);
+        if(hanging)model.hang(round.elapsed);
+        model.lookAtCamera(this.camera,false);
+      }
       round.cats.forEach((c,i)=>{
         const obj=this.cats[i];obj.root.visible=c.state!=='hidden'&&c.state!=='summoned';obj.root.rotation.x=0;
         if(obj.nameTag)obj.nameTag.visible=(c.state==='ground'||c.state==='eating')&&!(c.pickupCooldown>0);
@@ -536,7 +593,7 @@ export class World{
         this.foodLabel.userData.setText(f.state==='waiting'?`STUBBY IN ${Math.ceil(f.timer)}s`:f.state==='eating'?`DINNER · ${Math.ceil(f.timer)}s`:seconds>0?`REFILL ${refill}`:'BOWL READY');
       }
     }
-    const preview=view==='preview';this.markers.forEach(m=>{m.sign.visible=m.beam.visible=!m.groundOnly&&(view==='home'||preview);m.ring.rotation.z=time*.6;});
+    const preview=view==='preview';this.markers.forEach(m=>{m.sign.visible=!m.groundOnly&&(view==='home'||preview);m.beam.visible=!!m.persistentBeacon||m.sign.visible;m.ring.rotation.z=time*.6;});
     let pose=this.overviewPose(preview);
     if(view==='playing'||view==='paused'||view==='result')pose=this.followPose(round);
     if(capture)pose=this.capturePose(round);
@@ -554,6 +611,7 @@ export class World{
     for(const e of this.effects){e.life-=dt;e.root.children.forEach(c=>c.position.addScaledVector(c.userData.velocity,dt));e.root.scale.setScalar(Math.max(.01,e.life));if(e.life<=0){this.scene.remove(e.root);e.root.children.forEach(c=>c.geometry.dispose());e.root.children[0]?.material.dispose();}}
     this.effects=this.effects.filter(e=>e.life>0);if(this.sparks)this.sparks.rotation.y=time*.002;
     this.weather?.update(round,dt,view,this.reducedMotion.matches);
+    this.pad?.update(round,dt,view);
     if(this.rubbleChunks)updateRubbleShadows(this.rubbleChunks,round?.player,['home','preview','transition'].includes(view));
     this.renderer.render(this.scene,this.camera);
     if(round)this.updateSpeech(round,view);
