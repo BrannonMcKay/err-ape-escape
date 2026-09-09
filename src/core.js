@@ -1,7 +1,7 @@
 // Pure game rules and navigation; kept separate from rendering for repeatable tests.
 import {TACITURN_DURATION} from './soundtrack-clock.js';
 import {elevationFor} from './elevation.js';
-import {miniatureContact,padPower} from './leaky-pad.js';
+import {miniatureContact,padPower,STUBBY_POWER_SECONDS} from './leaky-pad.js';
 export const RULES = Object.freeze({ preview:15, kittyHold:8, kittyPickupCooldown:45, foodCooldown:120, foodArrival:3, foodEating:5, captureDuration:5.2, escapePoints:5, survivePoints:2, capturePoints:5, periodChance:.25, screamCooldown:16, screamDuration:3.5, retreatDuration:5 });
 export const DIFFICULTIES = {
   gentle:{name:'Gentle', playerSpeed:4.7, hunterSpeed:2.7, timeScale:1.2},
@@ -114,8 +114,9 @@ function repelPoweredContact(round,hunter){
 }
 export function tickPadPower(round){
   if(!round.leakyPad||round.phase!=='playing')return null;
-  const power=padPower(round);if(round.padPowerIndex===power.index)return null;
-  round.padPowerIndex=power.index;if(!power.active)return 'ended';
+  const power=padPower(round),wasActive=round.padPowerIndex!==-1;
+  round.padPowerIndex=power.index;if(wasActive===power.active)return null;
+  if(!power.active)return 'ended';
   for(const h of round.miniatures.filter(h=>h.state==='attached')){
     Object.assign(h,{state:'chasing',attachment:null,x:round.player.x,z:round.player.z,y:0});repelPoweredContact(round,h);
   }
@@ -140,16 +141,21 @@ export function startPanic(round,kind='scream',h=round.hunter){
 export function pickupCat(round,maze){
   if(round.phase!=='playing'||round.heldCat!==null)return null;
   const cat=round.cats.find(c=>c.state==='ground'&&!(c.pickupCooldown>0)&&Math.hypot(c.x-round.player.x,c.z-round.player.z)<1.65&&lineClear(maze,c,round.player));
-  if(!cat)return null;cat.state='held';cat.timer=RULES.kittyHold;round.heldCat=cat.id;return cat;
+  if(!cat)return null;
+  const powered=round.leakyPad&&cat.appearance==='stubby'&&cat.powerReady;
+  cat.state='held';cat.timer=powered?STUBBY_POWER_SECONDS:RULES.kittyHold;
+  cat.powerUntil=powered?round.elapsed+STUBBY_POWER_SECONDS:0;cat.powerReady=false;
+  round.heldCat=cat.id;return cat;
 }
 export function tickCats(round,dt,spawn){
+  if(round.phase!=='playing')return [];
   const events=[];
   for(const cat of round.cats){
     cat.pickupCooldown=Math.max(0,(cat.pickupCooldown||0)-dt);cat.jumpTime=Math.max(0,(cat.jumpTime||0)-dt);
     if(cat.state!=='held')continue;
-    cat.timer-=dt;
+    cat.timer=cat.powerUntil>0?Math.max(0,cat.powerUntil-round.elapsed):cat.timer-dt;
     if(cat.timer>0)continue;
-    Object.assign(cat,spawn(cat));cat.state='ground';cat.timer=0;cat.pickupCooldown=RULES.kittyPickupCooldown;cat.jumpTime=.6;cat.waypoint=null;cat.previousCell=null;cat.waited=0;
+    Object.assign(cat,spawn(cat));cat.state='ground';cat.timer=0;cat.powerUntil=0;cat.powerReady=false;cat.pickupCooldown=RULES.kittyPickupCooldown;cat.jumpTime=.6;cat.waypoint=null;cat.previousCell=null;cat.waited=0;
     round.heldCat=null;round.grace=Math.max(round.grace,1);events.push('jump');
   }
   return events;
@@ -183,7 +189,9 @@ export function tickFood(round,dt){
       food.state='eating';food.timer=RULES.foodEating;
       Object.assign(cat,{x:food.x,z:food.z,state:'eating',timer:0,waited:0,waypoint:null,previousCell:null});events.push('arrived');
     }else{
-      food.state='empty';food.timer=0;cat.state='ground';cat.waited=0;events.push('fed');
+      food.state='empty';food.timer=0;cat.state='ground';cat.waited=0;
+      if(round.leakyPad&&cat.appearance==='stubby')cat.powerReady=true;
+      events.push('fed');
     }
   }
   return events;

@@ -1,15 +1,23 @@
 import * as THREE from '../vendor/three.module.js';
 import {padPower} from './leaky-pad.js';
 
+function paletteOf(root){
+  const palette=[],seen=new Set();
+  root.traverse(o=>{const m=o.material;if(!m?.emissive||seen.has(m))return;seen.add(m);palette.push({material:m,color:m.color.clone(),emissive:m.emissive.clone(),intensity:m.emissiveIntensity});});
+  return palette;
+}
+function restorePalette(palette){for(const p of palette){p.material.color.copy(p.color);p.material.emissive.copy(p.emissive);p.material.emissiveIntensity=p.intensity;}}
+
 // A bounded pool of small, hinged butterflies trails from Christel toward the camera.
 export class PadPowerWorld{
   constructor(world){
-    this.world=world;this.palette=[];const seen=new Set();
-    world.runner.root.traverse(o=>{const m=o.material;if(!m?.emissive||seen.has(m))return;seen.add(m);this.palette.push({material:m,color:m.color.clone(),emissive:m.emissive.clone(),intensity:m.emissiveIntensity});});
+    this.world=world;this.palette=paletteOf(world.runner.root);
+    this.stubby=world.cats[2];this.stubbyPalette=paletteOf(this.stubby.root);this.stubbyActive=false;
     this.pink=new THREE.Color(0xff48cb);this.purple=new THREE.Color(0x9349ff);this.tint=new THREE.Color();
     const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const ctx=canvas.getContext('2d'),gradient=ctx.createRadialGradient(64,64,8,64,64,64);
     gradient.addColorStop(0,'#ffffff88');gradient.addColorStop(.45,'#ffffff44');gradient.addColorStop(1,'#ffffff00');ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);
     this.aura=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),color:0xff48cb,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.4}));this.aura.visible=false;world.scene.add(this.aura);
+    this.stubbyAura=new THREE.Sprite(this.aura.material.clone());this.stubbyAura.position.set(0,.4,0);this.stubbyAura.scale.set(1.3,1.45,1);this.stubbyAura.visible=false;this.stubby.root.add(this.stubbyAura);
     this.light=new THREE.PointLight(0xff48cb,0,8,1.6);world.scene.add(this.light);
     const wing=new THREE.Shape();wing.moveTo(0,0);wing.bezierCurveTo(.06,.18,.24,.22,.24,.1);wing.bezierCurveTo(.25,.03,.16,-.005,.12,-.02);wing.bezierCurveTo(.26,-.13,.09,-.24,0,0);
     const geometry=new THREE.ShapeGeometry(wing,10),body=new THREE.CylinderGeometry(.009,.012,.19,5);
@@ -21,19 +29,29 @@ export class PadPowerWorld{
     this.direction=new THREE.Vector3();this.motion=new THREE.Vector3();this.previousPlayer=null;this.serial=0;this.emission=0;this.active=false;
   }
   clear(){
-    for(const p of this.palette){p.material.color.copy(p.color);p.material.emissive.copy(p.emissive);p.material.emissiveIntensity=p.intensity;}
+    restorePalette(this.palette);restorePalette(this.stubbyPalette);this.stubbyAura.visible=false;this.stubbyActive=false;
     this.aura.visible=false;this.light.intensity=0;this.active=false;this.emission=0;this.serial=0;this.previousPlayer=null;
     for(const b of this.butterflies){b.root.visible=false;b.age=b.life=0;}
   }
   update(round,dt,view){
     const active=padPower(round).active&&['playing','paused','preview'].includes(view),p=round.player,t=round.elapsed||0;
     const step=view==='playing'?Math.max(0,dt):0,reduced=this.world.reducedMotion.matches;
+    const pulse=.5+.5*Math.sin(t*Math.PI*(reduced?.5:2.4)),cat=round.cats.find(c=>c.appearance==='stubby');
+    const stubbyActive=!!cat&&['playing','paused','preview'].includes(view)&&((cat.state==='ground'&&cat.powerReady)||(cat.state==='held'&&cat.powerUntil>t));
+    if(this.stubbyActive&&!stubbyActive)restorePalette(this.stubbyPalette);
+    this.stubbyActive=stubbyActive;this.stubbyAura.visible=stubbyActive;
+    if(stubbyActive){
+      for(let i=0;i<this.stubbyPalette.length;i++){
+        const entry=this.stubbyPalette[i];this.tint.copy(this.pink).lerp(this.purple,i%2?1-pulse:pulse);
+        entry.material.color.copy(entry.color).lerp(this.tint,.55);entry.material.emissive.copy(this.tint);entry.material.emissiveIntensity=.3+pulse*.5;
+      }
+      this.stubbyAura.material.color.copy(this.pink).lerp(this.purple,pulse);this.stubbyAura.material.opacity=.2+.15*pulse;this.stubbyAura.scale.set(1.3+pulse*.12,1.45+pulse*.12,1);
+    }
     this.motion.set(0,0,0);if(step&&this.previousPlayer)this.motion.set(p.x-this.previousPlayer.x,0,p.z-this.previousPlayer.z).divideScalar(step).clampLength(0,20);
     this.previousPlayer={x:p.x,z:p.z};
-    if(!active&&this.active){for(const entry of this.palette){entry.material.color.copy(entry.color);entry.material.emissive.copy(entry.emissive);entry.material.emissiveIntensity=entry.intensity;}this.emission=0;}
+    if(!active&&this.active){restorePalette(this.palette);this.emission=0;}
     this.active=active;this.aura.visible=active;this.light.intensity=0;
     if(active){
-      const pulse=.5+.5*Math.sin(t*Math.PI*(reduced?.5:2.4));
       for(let i=0;i<this.palette.length;i++){
         const entry=this.palette[i];this.tint.copy(this.pink).lerp(this.purple,(i%2)?1-pulse:pulse);
         entry.material.color.copy(entry.color).lerp(this.tint,.72);entry.material.emissive.copy(this.tint);entry.material.emissiveIntensity=.4+pulse*.45;
@@ -41,6 +59,8 @@ export class PadPowerWorld{
       this.tint.copy(this.pink).lerp(this.purple,pulse);this.aura.material.color.copy(this.tint);this.aura.material.opacity=.2+.15*pulse;
       this.aura.position.set(p.x,this.world.maze.heightAt(p.x,p.z)+.95,p.z);this.aura.scale.set(2.3+pulse*.25,2.8+pulse*.25,1);
       this.light.position.copy(this.aura.position);this.light.color.copy(this.tint);this.light.intensity=7+pulse*9;
+    }else if(stubbyActive){
+      this.stubby.root.getWorldPosition(this.light.position);this.light.position.y+=.4;this.light.color.copy(this.stubbyAura.material.color);this.light.intensity=3+pulse*3;
     }
     if(active&&p.moving&&step>0){
       this.emission+=step*(reduced?5:14);

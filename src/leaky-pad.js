@@ -1,11 +1,14 @@
 // The Leaky Pad's rules use active soundtrack time, never wall time or preview time.
 export const PAD_RULES=Object.freeze({firstRelease:30,releaseEvery:8,redLightsAt:29,size:1/3,firstSpeed:1.5,speedGrowth:1.1,tossChance:.5,attachmentsToTackle:3,oceanRedAt:60,sunsetAt:89,flightSeconds:4.8,tossCaptionSeconds:8});
 export const PAD_POWER_WINDOWS=Object.freeze([Object.freeze([93,112]),Object.freeze([186,204])]);
+export const STUBBY_POWER_SECONDS=18;
 const NO_POWER=Object.freeze({active:false,index:-1,remaining:0,speedMultiplier:1});
 export function padPower(round){
   if(!round.leakyPad)return NO_POWER;
   const t=round.elapsed||0,index=PAD_POWER_WINDOWS.findIndex(([start,end])=>t>=start&&t<end);
-  return index<0?NO_POWER:{active:true,index,remaining:PAD_POWER_WINDOWS[index][1]-t,speedMultiplier:2.5};
+  const held=round.cats?.find(c=>c.id===round.heldCat&&c.state==='held'),stubbyRemaining=Math.max(0,(held?.powerUntil||0)-t);
+  const remaining=Math.max(index<0?0:PAD_POWER_WINDOWS[index][1]-t,stubbyRemaining);
+  return remaining<=0?NO_POWER:{active:true,index:index<0?2:index,remaining,speedMultiplier:2.5,stubby:stubbyRemaining>0};
 }
 export const TOSS_LINES=Object.freeze(['Wait!!!!','She-it!','I barely even knew you!','See you this time next month!']);
 export const CHRISTEL_TOSS_LINE='I will not be hurt by a tiny stick man!';

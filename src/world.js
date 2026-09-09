@@ -284,10 +284,10 @@ export class World{
     this.light=sun;this.buildMaze();this.buildScenery();this.buildArtwork();
     if(maze.id==='snowman')this.weather=new WinterWeather(this.scene,maze);
     this.runner=makeRunner();this.stickman=makeStickman();this.scene.add(this.runner.root,this.stickman.root);
-    if(maze.id==='leaky-pad')this.padPower=new PadPowerWorld(this);
     this.miniModels=new Map();if(maze.id==='leaky-pad')this.stickman.root.visible=false;
     this.extraStickmen=(maze.presentation?.extraHunters||[]).map(h=>{const model=makeStickman(h.weapon);this.scene.add(model.root);return model;});
     this.cats=[makeCat(),makeCat(),makeCat('stubby')];this.cats.forEach(c=>this.scene.add(c.root));
+    if(maze.id==='leaky-pad')this.padPower=new PadPowerWorld(this);
     this.buildFoodBowl();
     this.startMarker=this.makeMarker(maze.point(maze.startIndex),0xd4ef93,'YOU START HERE',-4);
     if(maze.id==='pound-town'){this.startMarker.groundOnly=true;this.startMarker.ring.visible=false;}
@@ -578,7 +578,7 @@ export class World{
       }
       round.cats.forEach((c,i)=>{
         const obj=this.cats[i];obj.root.visible=c.state!=='hidden'&&c.state!=='summoned';obj.root.rotation.x=0;
-        if(obj.nameTag)obj.nameTag.visible=(c.state==='ground'||c.state==='eating')&&!(c.pickupCooldown>0);
+        if(obj.nameTag){obj.nameTag.visible=(c.state==='ground'||c.state==='eating')&&!(c.pickupCooldown>0);obj.nameTag.userData.setText(c.powerReady?'STUBBY · POWER':'STUBBY');}
         obj.cooldown.visible=c.state==='ground'&&c.pickupCooldown>0;if(obj.cooldown.visible)obj.cooldown.userData.setText(`${Math.ceil(c.pickupCooldown)}s · paws off`);
         if(c.state==='held'){
           if(obj.root.parent!==this.runner.carry)this.runner.carry.add(obj.root);obj.root.position.set(0,0,0);obj.root.rotation.y=(1-this.runner.photoBlend)*Math.PI/2;obj.root.rotation.z=-.06*this.runner.photoBlend;obj.root.scale.setScalar(.7);
