@@ -2,6 +2,7 @@ import * as THREE from '../vendor/three.module.js';
 import {huntersIn} from './core.js';
 import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
 import {terrainBoxes} from './terrain-geometry.js';
+import {updateRubbleShadows} from './city-detail.js';
 import {createWallStyles,opaqueAt,GRAFFITI_STYLE,GRAFFITI_WALL_HEIGHT} from './presentation.js';
 import {idlePerformance} from './runner-animation.js';
 import {mountainMaterials} from './terrain-material.js';
@@ -335,7 +336,7 @@ export class World{
     // Narrow mullions at the ends of each window make the transparent barrier legible.
     const posts=windows.flatMap(r=>r.h>r.w?[{...r,h:.18},{...r,y:r.y+r.h-.18,h:.18}]:[{...r,w:.18},{...r,x:r.x+r.w-.18,w:.18}]);
     create(posts,h.lintel-h.sill,(h.lintel+h.sill)/2,this.cutawayMaterial(mat(0x827577)));
-    create(rectangles(maze,c=>c!== ' '),3,-1.56,[sideMat,sideMat,terrain?.ground||rock(color.path),sideMat,sideMat,sideMat]);
+    this.floor=create(rectangles(maze,c=>c!== ' '),3,-1.56,[sideMat,sideMat,terrain?.ground||rock(color.path),sideMat,sideMat,sideMat]);
     // Small pebbles give the paper-derived paths a grounded, rocky surface.
     const pebbleGeo=new THREE.DodecahedronGeometry(.06),pebbleMat=mat(terrain?0xffffff:0x95808b);
     const spots=[];if(maze.id!=='snowman')for(let i=0;i<maze.walk.length;i+=23)if(maze.walk[i])spots.push(maze.point(i));
@@ -553,6 +554,7 @@ export class World{
     for(const e of this.effects){e.life-=dt;e.root.children.forEach(c=>c.position.addScaledVector(c.userData.velocity,dt));e.root.scale.setScalar(Math.max(.01,e.life));if(e.life<=0){this.scene.remove(e.root);e.root.children.forEach(c=>c.geometry.dispose());e.root.children[0]?.material.dispose();}}
     this.effects=this.effects.filter(e=>e.life>0);if(this.sparks)this.sparks.rotation.y=time*.002;
     this.weather?.update(round,dt,view,this.reducedMotion.matches);
+    if(this.rubbleChunks)updateRubbleShadows(this.rubbleChunks,round?.player,['home','preview','transition'].includes(view));
     this.renderer.render(this.scene,this.camera);
     if(round)this.updateSpeech(round,view);
   }

@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import {buildWasteland,buildTimberHandle,CITY_GROUND_Y} from './city-wasteland.js';
+import {rubbleBatches} from './city-detail.js';
 
 const material=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.94,...extra});
 const noise=`
@@ -160,8 +161,10 @@ export function buildCityDecor(world){
       if(i%5===0)flowers.push({...p,y:y+.30,sx:.10,sy:.045,sz:.10,color:[0xe5b977,0xc8accc,0xd9d8ae][i%3]});
     }
   }
-  batch(scene,new THREE.DodecahedronGeometry(.7,0),world.cutawayMaterial(material(0xffffff)),chunks);
-  batch(scene,new THREE.BoxGeometry(),world.cutawayMaterial(material(0xffffff)),bricks);
+  world.rubbleChunks=[
+    ...rubbleBatches(scene,new THREE.DodecahedronGeometry(.7,0),world.cutawayMaterial(material(0xffffff)),chunks),
+    ...rubbleBatches(scene,new THREE.BoxGeometry(),world.cutawayMaterial(material(0xffffff)),bricks),
+  ];
   batch(scene,new THREE.BoxGeometry(),world.cutawayMaterial(material(0x4c3d35,{metalness:.5})),rebar);
   batch(scene,new THREE.ConeGeometry(.6,1,4),material(0xffffff,{side:THREE.DoubleSide}),plants).castShadow=false;
   batch(scene,new THREE.IcosahedronGeometry(1,0),material(0xffffff),flowers).castShadow=false;
