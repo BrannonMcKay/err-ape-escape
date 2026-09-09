@@ -20,8 +20,24 @@ export function createMaze(data) {
   maze.open=(x,z)=>walk[maze.index(x,z)]===1;
   maze.route=findPath(maze,maze.startIndex,maze.exitIndex);
   if(!maze.route.length) throw new Error('The maze entrance and exit are disconnected.');
+  if(data.presentation?.catsStayOnExitRoute)maze.catRouteDistance=distancesToExitRoute(maze);
   maze.timeLimit=data.presentation?.soundtrack?.duration||TACITURN_DURATION;
   return maze;
+}
+function distancesToExitRoute(maze){
+  // Zero marks the solution path. Off-route cats can walk back after a carry
+  // or food summon, then keep roaming along the route instead of dead ends.
+  const {width:w,height:h,walk}=maze,distance=new Int32Array(w*h).fill(-1),queue=new Int32Array(w*h);
+  let head=0,tail=0;
+  for(const i of maze.route){distance[i]=0;queue[tail++]=i;}
+  while(head<tail){
+    const i=queue[head++],x=i%w,y=Math.floor(i/w);
+    for(const n of [x>0?i-1:-1,x<w-1?i+1:-1,y>0?i-w:-1,y<h-1?i+w:-1]){
+      if(n<0||!walk[n]||distance[n]!==-1)continue;
+      distance[n]=distance[i]+1;queue[tail++]=n;
+    }
+  }
+  return distance;
 }
 export function findPath(maze,start,end,blocked=null) {
   const {width:w,height:h,walk}=maze;
@@ -76,7 +92,7 @@ export function newRound(maze,difficulty='normal'){
     leakyPad:maze.id==='leaky-pad',miniatures:[],
     extraHunters:(maze.presentation?.extraHunters||[]).map(h=>({...h,...maze.point(h.cell[1]*maze.width+h.cell[0]),angle:Math.PI,stunned:0,panic:null,speech:null,hunterSpeed:base.hunterSpeed*h.speedMultiplier})),
     player:{...maze.point(maze.startIndex),angle:0,stamina:100,idleSeconds:0,speech:null},hunter:{...maze.point(maze.exitIndex),angle:Math.PI,stunned:0,panic:null,speech:null,scale:hunter.scale||1,speedMultiplier:hunter.speedMultiplier||1},
-    cats:[.07,.42,.74].map((t,id)=>({id,appearance:id===2?'stubby':'ginger',name:id===2?'Stubby':'Kitty',...maze.point(maze.route[Math.floor(maze.route.length*t)]),state:'ground',timer:0,pickupCooldown:0,moving:false})),
+    cats:(maze.presentation?.catRouteProgress||[.07,.42,.74]).map((t,id)=>({id,appearance:id===2?'stubby':'ginger',name:id===2?'Stubby':'Kitty',...maze.point(maze.route[Math.floor(maze.route.length*t)]),state:'ground',timer:0,pickupCooldown:0,moving:false})),
     heldCat:null,foodCooldown:0,food:null,capture:null,screamCooldown:0,grace:2,luckUsed:false,elapsed:0,result:null};
 }
 export function beginRound(round){if(round.phase==='preview'){round.phase='transition';round.transition=0;return true;}return false;}
@@ -167,6 +183,7 @@ export function roamCats(round,maze,dt,random=Math.random){
       if(cat.waypoint==null){
         const i=maze.index(cat.x,cat.z),x=i%w,y=Math.floor(i/w);
         let options=[x>0?i-1:-1,x<w-1?i+1:-1,y>0?i-w:-1,y<maze.height-1?i+w:-1].filter(n=>n>=0&&maze.walk[n]);
+        if(maze.catRouteDistance)options=options.filter(n=>maze.catRouteDistance[n]===0||maze.catRouteDistance[n]<maze.catRouteDistance[i]);
         const forward=options.filter(n=>n!==cat.previousCell);if(forward.length)options=forward;
         if(!options.length)break;
         cat.waypoint=options[Math.min(options.length-1,Math.floor(random()*options.length))];cat.previousCell=i;

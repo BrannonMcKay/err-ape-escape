@@ -25,7 +25,8 @@ export function tickMiniatures(round,maze,dt){
   round.player.tossRemaining=Math.max(0,(round.player.tossRemaining||0)-dt);
   while(round.miniatures.length<target){
     const n=round.miniatures.length,speedMultiplier=1.5*1.1**n;
-    const h={id:`mini-${n}`,miniature:true,state:'chasing',...maze.point(maze.startIndex),angle:round.player.angle,scale:1/3,speedMultiplier,hunterSpeed:round.settings.hunterSpeed*speedMultiplier,stunned:0,panic:null,speech:null,moving:false,releasedAt:30+8*n};
+    const spawn=maze.presentation?.miniatureSpawn||maze.start;
+    const h={id:`mini-${n}`,miniature:true,state:'chasing',...maze.point(spawn[1]*maze.width+spawn[0]),angle:round.player.angle,scale:1/3,speedMultiplier,hunterSpeed:round.settings.hunterSpeed*speedMultiplier,stunned:0,panic:null,speech:null,moving:false,releasedAt:30+8*n};
     round.miniatures.push(h);events.push({kind:'release',hunter:h});
   }
   if(round.player.speech){round.player.speech.remaining-=dt;if(round.player.speech.remaining<=0)round.player.speech=null;}

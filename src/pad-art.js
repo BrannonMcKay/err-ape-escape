@@ -63,12 +63,23 @@ export function startArrow(scene,maze){
   ctx.beginPath();ctx.moveTo(96,20);ctx.lineTo(177,160);ctx.lineTo(125,160);ctx.lineTo(125,480);ctx.lineTo(67,480);ctx.lineTo(67,160);ctx.lineTo(15,160);ctx.closePath();ctx.stroke();ctx.fill();
   const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
   const root=new THREE.Group();root.name='Starting direction painted on linen';scene.add(root);
-  // An arrow along the first legal passage, followed by a small arrow around its turn.
-  for(const [index,last] of [[1,8],[12,22]]){
-    const start=maze.point(maze.route[index]),end=maze.point(maze.route[last]),dx=end.x-start.x,dz=end.z-start.z,length=Math.hypot(dx,dz);
-    const geo=new THREE.PlaneGeometry(.48,length);geo.rotateX(-Math.PI/2);
+  // Bend the paint through each actual path cell, so a curved opening never
+  // gets a straight arrow cutting through the wall at its inside corner.
+  for(const [index,last] of [[1,12],[17,32]]){
+    const points=maze.route.slice(index,last+1).map(i=>maze.point(i)),positions=[],uvs=[],indices=[];
+    for(let i=0;i<points.length;i++){
+      const p=points[i],before=points[Math.max(0,i-1)],after=points[Math.min(points.length-1,i+1)];
+      const incoming=new THREE.Vector2(p.x-before.x,p.z-before.z),outgoing=new THREE.Vector2(after.x-p.x,after.z-p.z);
+      if(i===0)incoming.copy(outgoing);if(i===points.length-1)outgoing.copy(incoming);incoming.normalize();outgoing.normalize();
+      const normal=new THREE.Vector2(-incoming.y,incoming.x).add(new THREE.Vector2(-outgoing.y,outgoing.x)).normalize();
+      const halfWidth=.12/Math.max(.7,normal.dot(new THREE.Vector2(-outgoing.y,outgoing.x)));
+      for(const side of [1,-1])positions.push(p.x+normal.x*halfWidth*side,-.035,p.z+normal.y*halfWidth*side);
+      uvs.push(0,i/(points.length-1),1,i/(points.length-1));
+      if(i<points.length-1){const a=i*2;indices.push(a,a+2,a+1,a+1,a+2,a+3);}
+    }
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geo.setIndex(indices);geo.computeVertexNormals();
     const arrow=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
-    arrow.position.set((start.x+end.x)/2,-.035,(start.z+end.z)/2);arrow.rotation.y=Math.atan2(-dx,-dz);root.add(arrow);
+    root.add(arrow);
   }
   return root;
 }
