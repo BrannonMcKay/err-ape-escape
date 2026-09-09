@@ -1,5 +1,6 @@
 import {AudioCues,spatialMix,SOUND_RANGES,miniatureFootstepGain} from './audio-cues.js';
 import {EFFECTS,synthesizeEffect} from './audio-synth.js';
+import {createTinyFootstepBus,TINY_FOOTSTEP_PITCH} from './tiny-footstep-bus.js';
 
 // Set a slot to one recording URL or an array of variations. Null keeps the synth.
 // Resolve recordings from this module, e.g. new URL('../assets/cat-meow-01.wav',import.meta.url).href.
@@ -32,6 +33,7 @@ export class GameAudio{
       this.master=c.createDynamicsCompressor();this.master.threshold.value=-10;this.master.knee.value=10;this.master.ratio.value=6;
       this.master.connect(c.destination);this.buses={effects:c.createGain(),music:c.createGain()};
       for(const [name,bus] of Object.entries(this.buses)){bus.gain.value=this.enabled[name]?this.volume[name]:0;bus.connect(this.master);}
+      this.tinyFootsteps=createTinyFootstepBus(c,c.destination,this.enabled.effects?this.volume.effects:0);
       this.loadRecordings();
     }
     await this.context.resume();
@@ -62,7 +64,11 @@ export class GameAudio{
     gain.cancelScheduledValues(now);gain.setValueAtTime(gain.value,now);gain.linearRampToValueAtTime(0,now+1.4);this.fadeEnd=now+1.4;
   }
   setVolume(channel,value){this.volume[channel]=Math.max(0,Math.min(1,Number(value)||0));this.updateBus(channel);}
-  updateBus(channel){if(this.buses){const gain=this.buses[channel].gain,now=this.context.currentTime;gain.cancelScheduledValues(now);gain.setTargetAtTime(this.enabled[channel]&&!(channel==='music'&&this.roundEnded)?this.volume[channel]:0,now,.02);}}
+  updateBus(channel){if(this.buses){
+    const gain=this.buses[channel].gain,now=this.context.currentTime,volume=this.enabled[channel]&&!(channel==='music'&&this.roundEnded)?this.volume[channel]:0;
+    gain.cancelScheduledValues(now);gain.setTargetAtTime(volume,now,.02);
+    if(channel==='effects'&&this.tinyFootsteps){const tiny=this.tinyFootsteps.output.gain;tiny.cancelScheduledValues(now);tiny.setTargetAtTime(volume,now,.02);}
+  }}
   setView(view){
     if(view!==this.view){
       this.view=view;if(view!=='playing')this.stopEffects();
@@ -114,7 +120,7 @@ export class GameAudio{
     if(!this.enabled.effects||!this.context||this.context.state!=='running'||this.hidden||this.voices.size>=24)return null;
     const c=this.context,node=c.createBufferSource(),level=c.createGain(),panner=c.createStereoPanner();
     node.buffer=buffer;node.loop=loop;node.playbackRate.value=rate;level.gain.value=gain;panner.pan.value=pan;
-    node.connect(level);level.connect(panner);panner.connect(this.buses.effects);
+    node.connect(level);level.connect(panner);panner.connect(kind==='hunterStep'&&source?.miniature?this.tinyFootsteps.input:this.buses.effects);
     const voice={source:node,gain:level,panner,actor:source,kind,baseGain:gain};this.voices.add(voice);
     node.onended=()=>{node.disconnect();level.disconnect();panner.disconnect();this.voices.delete(voice);};node.start();return voice;
   }
@@ -122,11 +128,13 @@ export class GameAudio{
     if(!this.enabled.effects||!this.context)return null;
     const mix=source&&listener?spatialMix(listener,source,SOUND_RANGES[kind]||20):{gain:1,pan:0};
     if(mix.gain<=0)return null;
-    const stepGain=kind==='hunterStep'&&source?.miniature?this.miniatureStepGain:1;
-    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain*stepGain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:(source?.miniature?1.8:1)*(.94+this.random()*.12)});
+    const tinyStep=kind==='hunterStep'&&source?.miniature,stepGain=tinyStep?this.miniatureStepGain*this.miniatureAudibility(source):1;
+    if(stepGain<=0)return null;
+    const voice=this.playBuffer(this.effectBuffer(kind),{kind,source,gain:EFFECTS[kind].gain*mix.gain*stepGain,pan:mix.pan,loop:kind==='purr',rate:kind==='purr'?1:(tinyStep?TINY_FOOTSTEP_PITCH:source?.miniature?1.8:1)*(.94+this.random()*.12)});
     if(voice)voice.baseGain=EFFECTS[kind].gain;
     return voice;
   }
+  miniatureAudibility(actor){return this.cues.round?(this.cues.miniatureGains.get(actor.id)||0):1;}
   tone(frequency=440,duration=.12,type='sine',volume=.025){
     if(!this.enabled.effects||!this.context)return;
     const c=this.context,buffer=c.createBuffer(1,Math.ceil(c.sampleRate*duration),c.sampleRate),data=buffer.getChannelData(0);let phase=0;
@@ -157,7 +165,7 @@ export class GameAudio{
     const active=this.enabled.effects&&this.context?.state==='running'&&this.view==='playing'&&!this.hidden;
     const cues=this.cues.update(round,dt,active);
     if(!active){if(this.purr){this.stopVoice(this.purr);this.purr=null;}return;}
-    this.miniatureStepGain=miniatureFootstepGain(round);
+    this.miniatureStepGain=miniatureFootstepGain(round,this.cues.nearestMiniatures);
     for(const event of cues.events)this.effect(event.kind,event.kind==='playerStep'?null:event.source,round.player);
     if(cues.purring&&!this.purr)this.purr=this.effect('purr');
     if(!cues.purring&&this.purr){this.stopVoice(this.purr);this.purr=null;}
@@ -165,7 +173,7 @@ export class GameAudio{
       if(!voice.actor||voice.stopping)continue;
       if(voice.kind==='meow'&&voice.actor.state!=='ground'){this.stopVoice(voice);continue;}
       const mix=spatialMix(round.player,voice.actor,SOUND_RANGES[voice.kind]||20);
-      const stepGain=voice.kind==='hunterStep'&&voice.actor.miniature?this.miniatureStepGain:1;
+      const stepGain=voice.kind==='hunterStep'&&voice.actor.miniature?this.miniatureStepGain*this.miniatureAudibility(voice.actor):1;
       voice.gain.gain.setTargetAtTime(voice.baseGain*mix.gain*stepGain,this.context.currentTime,.04);
       voice.panner.pan.setTargetAtTime(mix.pan,this.context.currentTime,.04);
     }

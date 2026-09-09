@@ -9,27 +9,40 @@ export function spatialMix(listener,source,range){
   return {distance,gain:fade*fade,pan:distance<.001?0:clamp((-Math.cos(listener.angle)*dx+Math.sin(listener.angle)*dz)/distance,-1,1)*.85};
 }
 
-export function miniatureFootstepGain(round){
+export function nearestMiniatureFootsteps(round){
+  if(!round.leakyPad)return [];
+  const p=round.player;
+  return (round.miniatures||[]).filter(h=>h.state==='chasing'&&h.moving&&Math.hypot(h.x-p.x,h.z-p.z)<SOUND_RANGES.hunterStep)
+    .sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z)).slice(0,5);
+}
+export function miniatureFootstepGain(round,nearest=nearestMiniatureFootsteps(round)){
   if(!round.leakyPad)return 1;
-  // Distant, stationary, and attached miniatures do not quiet the nearby runners.
-  const crowd=(round.miniatures||[]).reduce((sum,h)=>sum+(h.state==='chasing'&&h.moving?spatialMix(round.player,h,SOUND_RANGES.hunterStep).gain**2:0),0);
+  const crowd=nearest.reduce((sum,h)=>sum+spatialMix(round.player,h,SOUND_RANGES.hunterStep).gain**2,0);
   return .85/Math.sqrt(1+.15*Math.max(0,crowd-1));
 }
 
 export class AudioCues{
   constructor(random=Math.random){this.random=random;this.round=null;this.reset();}
-  reset(){this.positions=new Map();this.steps={player:0,hunter:0};this.meows=new Map();this.menace=4;this.catGap=0;}
+  reset(){this.positions=new Map();this.steps={player:0,hunter:0};this.meows=new Map();this.menace=4;this.catGap=0;this.miniatureGains=new Map();this.nearestMiniatures=[];}
   update(round,dt,active){
     if(this.round!==round){this.round=round;this.reset();}
     if(!active){this.reset();return {events:[],purring:false};}
     const events=[],p=round.player;dt=clamp(dt,0,.25);
+    this.nearestMiniatures=nearestMiniatureFootsteps(round);
+    const selected=new Set(this.nearestMiniatures.map(h=>h.id)),fade=1-Math.exp(-dt/.06);
+    for(const id of selected)if(!this.miniatureGains.has(id))this.miniatureGains.set(id,0);
+    for(const [id,before] of this.miniatureGains){
+      const gain=before+((selected.has(id)?1:0)-before)*fade;
+      if(!selected.has(id)&&gain<.001)this.miniatureGains.delete(id);else this.miniatureGains.set(id,gain);
+    }
     for(const [name,actor,stride,kind] of [['player',p,1.6,'playerStep'],...huntersIn(round).map(h=>[h.id||'hunter',h,1.65*(h.scale||1),'hunterStep'])]){
       const before=this.positions.get(name);this.positions.set(name,{x:actor.x,z:actor.z});
       const traveled=before?Math.hypot(actor.x-before.x,actor.z-before.z):0;
       // Ignore teleports, blocked input, posing, and paused-frame backlogs.
       if(traveled>.00001&&traveled<=Math.max(.3,dt*12)){
         this.steps[name]=(this.steps[name]||0)+traveled;
-        if(this.steps[name]>=stride){this.steps[name]%=stride;events.push({kind,source:actor});}
+        // Track every runner's cadence so joining the audible five cannot create a backlog.
+        if(this.steps[name]>=stride){this.steps[name]%=stride;if(!actor.miniature||selected.has(actor.id))events.push({kind,source:actor});}
       }else if(traveled===0||traveled>Math.max(.3,dt*12))this.steps[name]=0;
     }
     this.catGap=Math.max(0,this.catGap-dt);
