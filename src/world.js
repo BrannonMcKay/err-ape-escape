@@ -1,6 +1,8 @@
 import * as THREE from '../vendor/three.module.js';
 import {huntersIn} from './core.js';
 import {padMaterials,PadWorld} from './pad-world.js';
+import {PadPowerWorld} from './pad-power-world.js';
+import {padPower} from './leaky-pad.js';
 import {cityMaterials,cityPropMaterial,buildCityDecor} from './city-world.js';
 import {terrainBoxes} from './terrain-geometry.js';
 import {updateRubbleShadows} from './city-detail.js';
@@ -102,7 +104,7 @@ export function makeRunner(){
   root.scale.setScalar(.85);
   let turn=0,idleBlend=0,photoBlend=0;
   const dampAngle=(from,to,f)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*f;
-  return {root,body,carry,hairLocks:strands,get photoBlend(){return photoBlend;},animate(t,moving,holding,seconds=0,dt=1/60,cameraOffset=Math.PI,reducedMotion=false){
+  return {root,body,carry,hairLocks:strands,get photoBlend(){return photoBlend;},animate(t,moving,holding,seconds=0,dt=1/60,cameraOffset=Math.PI,reducedMotion=false,powered=false){
     const idle=idlePerformance(seconds,holding,reducedMotion),ease=1-Math.exp(-12*dt);
     idleBlend+=(idle.blend-idleBlend)*ease;photoBlend+=((idle.mode==='cuddle'?idle.blend:0)-photoBlend)*ease;
     const facing=idle.mode==='cuddle'?cameraOffset:idle.yaw;
@@ -131,14 +133,15 @@ export function makeRunner(){
     }
     carry.position.set(-.18*photoBlend,.96+.11*photoBlend,.36+.04*photoBlend);carry.rotation.z=.08*photoBlend;
     expression.material.map=idleBlend>.2?happyTexture:normalTexture;
-    strands.forEach((s,i)=>{s.rotation.x=.1+Math.sin(t*(moving?9:2)+i*.8)*(moving?.25:.05)+idle.twirl*.32*idleBlend;s.rotation.z=idle.mode==='dance'?Math.sin(idle.beat+i*.45)*.09*idleBlend:0;});
+    const rushing=powered&&moving;
+    strands.forEach((s,i)=>{s.rotation.x=(rushing?1.1:.1)+Math.sin(t*(rushing?16:moving?9:2)+i*.8)*(moving?.25:.05)+idle.twirl*.32*idleBlend;s.rotation.z=rushing?Math.sin(t*11+i*.6)*.14:idle.mode==='dance'?Math.sin(idle.beat+i*.45)*.09*idleBlend:0;s.scale.y=rushing?1.35:1;});
   },throwTiny(remaining){
     const swing=Math.sin(Math.PI*(1-remaining/.85));limbs[3].rotation.z=-1.9*swing;limbs[3].rotation.x=-1.1*swing;elbows[1].rotation.x=-.8*swing;body.rotation.z=-.12*swing;expression.material.map=happyTexture;
   },tackle(t){
     body.rotation.x=body.rotation.y=0;body.position.x=0;expression.material.map=normalTexture;
     const fall=THREE.MathUtils.smoothstep(t,.85,1.6);body.rotation.z=-fall*1.38;body.position.y=fall*.18;
     limbs[0].rotation.x=-fall*.7;limbs[2].rotation.x=fall*.55;limbs[1].rotation.z=-fall*.65;limbs[3].rotation.z=fall*.65;
-  },reset(){turn=idleBlend=photoBlend=0;limbs.forEach(l=>l.rotation.set(0,0,0));elbows.forEach(e=>e.rotation.set(0,0,0));body.rotation.set(0,0,0);body.position.set(0,0,0);carry.position.set(0,.96,.36);carry.rotation.set(0,0,0);expression.material.map=normalTexture;}};
+  },reset(){turn=idleBlend=photoBlend=0;strands.forEach(s=>{s.rotation.set(0,0,0);s.scale.set(1,1,1);});limbs.forEach(l=>l.rotation.set(0,0,0));elbows.forEach(e=>e.rotation.set(0,0,0));body.rotation.set(0,0,0);body.position.set(0,0,0);carry.position.set(0,.96,.36);carry.rotation.set(0,0,0);expression.material.map=normalTexture;}};
 }
 export function makeStickman(weapon=null){
   const root=new THREE.Group(),body=new THREE.Group();root.add(body);const ink=mat(color.ink),white=mat(STICKMAN_TUNING.calmFace);const limbs=[];
@@ -281,6 +284,7 @@ export class World{
     this.light=sun;this.buildMaze();this.buildScenery();this.buildArtwork();
     if(maze.id==='snowman')this.weather=new WinterWeather(this.scene,maze);
     this.runner=makeRunner();this.stickman=makeStickman();this.scene.add(this.runner.root,this.stickman.root);
+    if(maze.id==='leaky-pad')this.padPower=new PadPowerWorld(this);
     this.miniModels=new Map();if(maze.id==='leaky-pad')this.stickman.root.visible=false;
     this.extraStickmen=(maze.presentation?.extraHunters||[]).map(h=>{const model=makeStickman(h.weapon);this.scene.add(model.root);return model;});
     this.cats=[makeCat(),makeCat(),makeCat('stubby')];this.cats.forEach(c=>this.scene.add(c.root));
@@ -545,10 +549,10 @@ export class World{
     }
     if(!capture&&this.wasCapture){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());}this.wasCapture=capture;
     if(round){
-      if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.pad?.clear();this.miniModels.forEach(m=>m.root.visible=false);this.round=round;}
+      if(this.round!==round){this.runner.reset();this.stickman.reset();this.extraStickmen.forEach(m=>m.reset());this.weather?.clear();this.pad?.clear();this.padPower?.clear();this.miniModels.forEach(m=>m.root.visible=false);this.round=round;}
       const {player:p,hunter:h}=round;this.runner.root.position.set(p.x,this.maze.heightAt(p.x,p.z),p.z);this.runner.root.rotation.y=p.angle;
       const cameraOffset=Math.atan2(this.camera.position.x-p.x,this.camera.position.z-p.z)-p.angle;
-      if(view!=='paused')this.runner.animate(time,!!p.moving,round.heldCat!==null,view==='playing'?p.idleSeconds:0,dt,cameraOffset,this.reducedMotion.matches);
+      if(view!=='paused')this.runner.animate(padPower(round).active?round.elapsed:time,!!p.moving,round.heldCat!==null,view==='playing'?p.idleSeconds:0,dt,cameraOffset,this.reducedMotion.matches,padPower(round).active);
       if(p.tossRemaining>0)this.runner.throwTiny(p.tossRemaining);
       if(!round.leakyPad)huntersIn(round).forEach((h,i)=>{const model=i?this.extraStickmen[i-1]:this.stickman;
         model.root.position.set(h.x,this.maze.heightAt(h.x,h.z),h.z);model.root.scale.setScalar(h.scale||1);model.root.rotation.y=h.angle;
@@ -612,6 +616,7 @@ export class World{
     this.effects=this.effects.filter(e=>e.life>0);if(this.sparks)this.sparks.rotation.y=time*.002;
     this.weather?.update(round,dt,view,this.reducedMotion.matches);
     this.pad?.update(round,dt,view);
+    this.padPower?.update(round,dt,view);
     if(this.rubbleChunks)updateRubbleShadows(this.rubbleChunks,round?.player,['home','preview','transition'].includes(view));
     this.renderer.render(this.scene,this.camera);
     if(round)this.updateSpeech(round,view);

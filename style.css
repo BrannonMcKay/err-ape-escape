@@ -25,3 +25,5 @@ dialog.victory-dialog{width:900px;max-width:94vw;padding:30px}.result-layout.wit
 @media(min-width:601px) and (max-width:800px){.hud-left .eyebrow{display:block;max-width:195px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .world-caption h2 .pad-title-word{display:inline-block;font-weight:inherit;background:linear-gradient(to bottom,#ffffff 0%,#fff2f2 14%,#db8290 38%,#8c0718 76%,#700011 100%);background-clip:text;-webkit-background-clip:text;color:transparent}
 .toast{white-space:pre-line}
+
+#hunter-status.power-active{color:#ffb4f2;font-weight:700;text-shadow:0 0 12px #a642c9,0 2px 6px #29212e}

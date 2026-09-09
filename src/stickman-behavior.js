@@ -83,9 +83,12 @@ function distances(maze,start){
   while(head<tail){const i=q[head++];for(const n of neighbors(maze,i))if(d[n]===-1){d[n]=d[i]+1;q[tail++]=n;}}
   return d;
 }
-function animalBlocks(round,maze,point){
-  if(round.heldCat!==null&&Math.hypot(point.x-round.player.x,point.z-round.player.z)<2.5&&lineClear(maze,round.player,point))return true;
-  return round.cats.some(c=>(c.state==='ground'||c.state==='eating')&&Math.hypot(c.x-point.x,c.z-point.z)<1.25&&lineClear(maze,c,point));
+function animalBlocks(round,maze,point,hunter){
+  // A powered shove may escape a kitty's existing shield, but cannot enter
+  // another kitty's space or move closer to a kitty that is already nearby.
+  const leaving=(center,radius)=>hunter?.panic?.powered&&Math.hypot(hunter.x-center.x,hunter.z-center.z)<radius&&Math.hypot(point.x-center.x,point.z-center.z)>Math.hypot(hunter.x-center.x,hunter.z-center.z)+.000001;
+  if(round.heldCat!==null&&Math.hypot(point.x-round.player.x,point.z-round.player.z)<2.5&&lineClear(maze,round.player,point)&&!leaving(round.player,2.5))return true;
+  return round.cats.some(c=>(c.state==='ground'||c.state==='eating')&&Math.hypot(c.x-point.x,c.z-point.z)<1.25&&lineClear(maze,c,point)&&!leaving(c,1.25));
 }
 
 // Fast, cell-by-cell panic movement: random turns for screams, increasing maze distance for retreats.
@@ -104,7 +107,7 @@ export function tickPanic(round,maze,dt,random=Math.random,h=round.hunter){
       const i=maze.index(h.x,h.z);
       if(!panic.settled){panic.waypoint=i;panic.settled=true;}
       else{
-        let options=neighbors(maze,i).filter(n=>{const p=maze.point(n);return canOccupy(maze,p.x,p.z)&&!animalBlocks(round,maze,p);});
+        let options=neighbors(maze,i).filter(n=>{const p=maze.point(n);return canOccupy(maze,p.x,p.z)&&!animalBlocks(round,maze,p,h);});
         const forward=options.filter(n=>n!==panic.previousCell);
         const changeMind=!retreat&&panic.turnTimer<=0&&random()<.2;
         if(forward.length&&!changeMind)options=forward;
@@ -117,7 +120,7 @@ export function tickPanic(round,maze,dt,random=Math.random,h=round.hunter){
     const target=maze.point(panic.waypoint),dx=target.x-h.x,dz=target.z-h.z,d=Math.hypot(dx,dz);
     if(d<.001){panic.waypoint=null;continue;}
     const travel=Math.min(budget,d),next={x:h.x+dx/d*travel,z:h.z+dz/d*travel};
-    if(animalBlocks(round,maze,next)){h.catBlocked=true;panic.waypoint=null;break;}
+    if(animalBlocks(round,maze,next,h)){h.catBlocked=true;panic.waypoint=null;break;}
     h.angle=Math.atan2(dx,dz);
     if(!moveWithCollision(maze,h,next.x-h.x,next.z-h.z)){panic.waypoint=null;break;}
     h.moving=true;budget-=travel;if(travel>=d-.001)panic.waypoint=null;

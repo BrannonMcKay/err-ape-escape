@@ -1,10 +1,17 @@
 // The Leaky Pad's rules use active soundtrack time, never wall time or preview time.
-export const PAD_RULES=Object.freeze({firstRelease:30,releaseEvery:8,size:1/3,firstSpeed:1.5,speedGrowth:1.1,tossChance:.5,attachmentsToTackle:3,oceanRedAt:60,sunsetAt:89,flightSeconds:4.8,tossCaptionSeconds:8});
+export const PAD_RULES=Object.freeze({firstRelease:30,releaseEvery:8,redLightsAt:29,size:1/3,firstSpeed:1.5,speedGrowth:1.1,tossChance:.5,attachmentsToTackle:3,oceanRedAt:60,sunsetAt:89,flightSeconds:4.8,tossCaptionSeconds:8});
+export const PAD_POWER_WINDOWS=Object.freeze([Object.freeze([93,112]),Object.freeze([186,204])]);
+const NO_POWER=Object.freeze({active:false,index:-1,remaining:0,speedMultiplier:1});
+export function padPower(round){
+  if(!round.leakyPad)return NO_POWER;
+  const t=round.elapsed||0,index=PAD_POWER_WINDOWS.findIndex(([start,end])=>t>=start&&t<end);
+  return index<0?NO_POWER:{active:true,index,remaining:PAD_POWER_WINDOWS[index][1]-t,speedMultiplier:2.5};
+}
 export const TOSS_LINES=Object.freeze(['Wait!!!!','She-it!','I barely even knew you!','See you this time next month!']);
 export const CHRISTEL_TOSS_LINE='I will not be hurt by a tiny stick man!';
 export function padTimeline(seconds){
   const t=Math.max(0,seconds);
-  return {oceanRed:Math.min(1,t/PAD_RULES.oceanRedAt),sunset:Math.min(1,t/PAD_RULES.sunsetAt),redLights:t>=30,beamAngle:(t-30)/8*Math.PI*2,
+  return {oceanRed:Math.min(1,t/PAD_RULES.oceanRedAt),sunset:Math.min(1,t/PAD_RULES.sunsetAt),redLights:t>=PAD_RULES.redLightsAt,beamAngle:(t-30)/8*Math.PI*2,
     releaseCount:t<30?0:1+Math.floor((t-30)/8)};
 }
 export function miniatureContact(round,h,random=Math.random){

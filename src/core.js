@@ -1,7 +1,7 @@
 // Pure game rules and navigation; kept separate from rendering for repeatable tests.
 import {TACITURN_DURATION} from './soundtrack-clock.js';
 import {elevationFor} from './elevation.js';
-import {miniatureContact} from './leaky-pad.js';
+import {miniatureContact,padPower} from './leaky-pad.js';
 export const RULES = Object.freeze({ preview:15, kittyHold:8, kittyPickupCooldown:45, foodCooldown:120, foodArrival:3, foodEating:5, captureDuration:5.2, escapePoints:5, survivePoints:2, capturePoints:5, periodChance:.25, screamCooldown:16, screamDuration:3.5, retreatDuration:5 });
 export const DIFFICULTIES = {
   gentle:{name:'Gentle', playerSpeed:4.7, hunterSpeed:2.7, timeScale:1.2},
@@ -89,7 +89,7 @@ export function newRound(maze,difficulty='normal'){
   const base=DIFFICULTIES[difficulty]||DIFFICULTIES.normal,hunter=maze.presentation?.hunter||{};
   const settings={...base,hunterSpeed:base.hunterSpeed*(hunter.speedMultiplier||1)};
   return {phase:'preview',preview:RULES.preview,remaining:maze.timeLimit,duration:maze.timeLimit,settings,
-    leakyPad:maze.id==='leaky-pad',miniatures:[],
+    leakyPad:maze.id==='leaky-pad',miniatures:[],padPowerIndex:-1,
     extraHunters:(maze.presentation?.extraHunters||[]).map(h=>({...h,...maze.point(h.cell[1]*maze.width+h.cell[0]),angle:Math.PI,stunned:0,panic:null,speech:null,hunterSpeed:base.hunterSpeed*h.speedMultiplier})),
     player:{...maze.point(maze.startIndex),angle:0,stamina:100,idleSeconds:0,speech:null},hunter:{...maze.point(maze.exitIndex),angle:Math.PI,stunned:0,panic:null,speech:null,scale:hunter.scale||1,speedMultiplier:hunter.speedMultiplier||1},
     cats:(maze.presentation?.catRouteProgress||[.07,.42,.74]).map((t,id)=>({id,appearance:id===2?'stubby':'ginger',name:id===2?'Stubby':'Kitty',...maze.point(maze.route[Math.floor(maze.route.length*t)]),state:'ground',timer:0,pickupCooldown:0,moving:false})),
@@ -108,8 +108,26 @@ export function finishRound(round,result,scores){
   scores.rounds++;return true;
 }
 export const huntersIn=round=>round.leakyPad?round.miniatures.filter(h=>h.state==='chasing'):[round.hunter,...(round.extraHunters||[])];
+export const playerMovementSpeed=(round,sprinting=false,backward=false)=>round.settings.playerSpeed*padPower(round).speedMultiplier*(sprinting?1.48:1)*(backward?.65:1);
+function repelPoweredContact(round,hunter){
+  startPanic(round,'period',hunter);hunter.panic.powered=true;hunter.ai=null;hunter.speech={text:'Not again!',remaining:RULES.retreatDuration};
+}
+export function tickPadPower(round){
+  if(!round.leakyPad||round.phase!=='playing')return null;
+  const power=padPower(round);if(round.padPowerIndex===power.index)return null;
+  round.padPowerIndex=power.index;if(!power.active)return 'ended';
+  for(const h of round.miniatures.filter(h=>h.state==='attached')){
+    Object.assign(h,{state:'chasing',attachment:null,x:round.player.x,z:round.player.z,y:0});repelPoweredContact(round,h);
+  }
+  return 'started';
+}
 export function tryCapture(round,random=Math.random,hunter=round.hunter){
-  if(round.heldCat!==null||round.grace>0||hunter.stunned>0)return 'protected';
+  if(hunter.stunned>0)return 'protected';
+  if(padPower(round).active){
+    if(hunter.miniature&&hunter.state==='chasing'){repelPoweredContact(round,hunter);return 'power-repelled';}
+    return 'protected';
+  }
+  if(round.heldCat!==null||round.grace>0)return 'protected';
   if(hunter.miniature)return miniatureContact(round,hunter,random);
   if(!round.luckUsed){round.luckUsed=true;if(random()<RULES.periodChance){startPanic(round,'period',hunter);round.grace=RULES.retreatDuration+.75;return 'period';}}
   return 'caught';
@@ -197,6 +215,7 @@ export function roamCats(round,maze,dt,random=Math.random){
   }
 }
 export function beginCapture(round,hunter=round.hunter){
+  if(padPower(round).active)return false;
   if(round.phase!=='playing'||round.result||round.heldCat!==null||round.grace>0||hunter.stunned>0)return false;
   if(round.leakyPad&&round.miniatures.filter(h=>h.state==='attached').length<3)return false;
   round.phase='capture';round.player.moving=false;huntersIn(round).forEach(h=>h.moving=false);

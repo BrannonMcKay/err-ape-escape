@@ -1,6 +1,6 @@
 {
   "sourceSize": [1062, 1314],
-  "soundtrack": {"file":"assets/dream-light.mp3","name":"Dream Light","credit":"Mimesis · Dream Light","duration":133.25060416666668},
+  "soundtrack": {"file":"assets/fourth-dimension.m4a","name":"Fourth Dimension","credit":"Mimesis · Fourth Dimension","duration":220},
   "theme": {"id":"leaky-pad","colors":{"sky":"#9cced0","fog":"#9cced0"}},
   "wallHeights": {"tall":0.72,"low":0.72,"sill":0.4,"lintel":0.6},
   "lamps": [[199,174],[360,454],[455,420],[588,420],[669,475],[659,572],[754,600],[649,733],[257,751],[275,850],[504,877],[395,950],[823,840],[864,961],[640,993],[845,1075],[748,1138]],

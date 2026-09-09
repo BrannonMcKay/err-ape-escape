@@ -171,6 +171,7 @@ export class GameAudio{
       this.musicStatus=`Loading ${this.defaultMusic.name}…`;this.onChange();
       const response=await fetch(this.defaultMusic.file);if(!response.ok)throw new Error(`${this.defaultMusic.name} could not load.`);
       this.musicBuffer=await this.context.decodeAudioData(await response.arrayBuffer());
+      this.musicRoundDuration=this.defaultMusic.duration??this.musicBuffer.duration;
       this.retimeRound();
       this.musicStatus='Ready · original Mimesis recording';this.onChange();
     })().catch(error=>{this.musicPromise=null;this.musicStatus='Music could not load. Try again.';this.onChange();throw error;});
@@ -193,7 +194,8 @@ export class GameAudio{
     const source=this.musicSource;this.musicSource=null;source.stop();
   }
   // Local recordings replace the music for this page session; no upload takes place.
-  retimeRound(){if(this.clockRound&&!this.roundEnded){this.clockRound.duration=this.musicBuffer.duration;this.clockRound.remaining=Math.max(0,this.clockRound.duration-this.clockRound.elapsed);}}
+  get roundDuration(){return this.musicRoundDuration??this.musicBuffer?.duration;}
+  retimeRound(){if(this.clockRound&&!this.roundEnded){this.clockRound.duration=this.roundDuration;this.clockRound.remaining=Math.max(0,this.clockRound.duration-this.clockRound.elapsed);}}
   async useMusicFile(file){
     await this.unlock();if(this.musicPromise)await this.musicPromise.catch(()=>{});
     const data=await file.arrayBuffer();let buffer;
@@ -201,7 +203,7 @@ export class GameAudio{
       const rendered=await renderMidi(data);buffer=this.context.createBuffer(2,rendered.channels[0].length,rendered.sampleRate);
       rendered.channels.forEach((channel,i)=>buffer.copyToChannel(channel,i));
     }else buffer=await this.context.decodeAudioData(data);
-    this.stopMusic();this.musicBuffer=buffer;this.musicOffset=0;this.musicLabel=file.name;this.musicStatus='Local track · this session';
+    this.stopMusic();this.musicBuffer=buffer;this.musicRoundDuration=buffer.duration;this.musicOffset=0;this.musicLabel=file.name;this.musicStatus='Local track · this session';
     this.retimeRound();
     this.enabled.music=true;this.updateBus('music');this.syncMusic();this.onChange();
   }
@@ -212,7 +214,7 @@ export class GameAudio{
   async setDefaultMusic(track){
     if(this.musicPromise)await this.musicPromise.catch(()=>{});
     this.stopMusic();this.clockRound=null;this.defaultMusic=track||{file:MUSIC_ASSET,name:'Taciturn Eternity',credit:MUSIC_CREDIT};
-    this.musicBuffer=null;this.musicPromise=null;this.musicOffset=0;this.musicLabel=this.defaultMusic.credit;this.musicStatus='Ready';this.onChange();
+    this.musicBuffer=null;this.musicRoundDuration=null;this.musicPromise=null;this.musicOffset=0;this.musicLabel=this.defaultMusic.credit;this.musicStatus='Ready';this.onChange();
     if(this.context&&this.enabled.music)await this.loadMusic();
   }
   snapshot(){return {context:this.context?.state||'not started',effects:this.enabled.effects,music:this.enabled.music,voices:this.voices.size,purring:!!this.purr,musicPlaying:!!this.musicSource,musicFading:!!this.fadeEnd,musicGain:this.buses?.music.gain.value||0,musicPosition:this.musicBuffer?Math.min(this.musicBuffer.duration,this.musicOffset+(this.musicSource?this.context.currentTime-this.musicStart:0)):0,musicDuration:this.musicBuffer?.duration||0,musicStatus:this.musicStatus};}
