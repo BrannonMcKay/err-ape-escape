@@ -5,6 +5,30 @@ let horrorFont;
 export function loadPadFont(){
   return horrorFont??=new FontFace('Creepster',`url("${new URL('../assets/creepster-regular.ttf',import.meta.url).href}")`).load().then(font=>document.fonts.add(font));
 }
+export function lighthouseGraffiti(tower,facing){
+  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=768;const ctx=canvas.getContext('2d');
+  const draw=()=>{
+    ctx.clearRect(0,0,512,768);ctx.fillStyle=ctx.strokeStyle='#a10b32';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='132px Creepster, Impact, sans-serif';
+    ctx.shadowColor='#a10b32';ctx.shadowBlur=6;
+    ['NO','CHURRO','ZONE!'].forEach((line,i)=>{ctx.save();ctx.translate(256,150+i*216);ctx.rotate([-.07,.025,-.04][i]);ctx.fillText(line,0,0,432);ctx.restore();});ctx.shadowBlur=0;
+    // Speckles around the actual ink and runs descending from its lower edges.
+    const ink=ctx.getImageData(0,0,512,768).data;let seed=47;const random=()=>{seed=seed*16807%2147483647;return seed/2147483647;};
+    for(let n=0;n<3500;n++){const x=Math.floor(random()*512),y=Math.floor(random()*768);if(ink[(y*512+x)*4+3]<80)continue;ctx.globalAlpha=.15+random()*.4;ctx.beginPath();ctx.arc(x+(random()-.5)*24,y+(random()-.5)*24,.5+random()*1.5,0,Math.PI*2);ctx.fill();}
+    ctx.globalAlpha=.8;ctx.lineCap='round';
+    for(const [x,row,length] of [[212,0,34],[289,0,49],[90,1,32],[210,1,46],[391,1,26],[159,2,33],[334,2,48]]){
+      const center=150+row*216;let bottom=center;
+      for(let y=center;y<center+90;y++)if(ink[(y*512+x)*4+3]>120)bottom=y;
+      if(bottom===center)continue;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x,bottom-4);ctx.quadraticCurveTo(x+3,bottom+length*.45,x+1,bottom+length);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  };draw();
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
+  let disposed=false;texture.addEventListener('dispose',()=>{disposed=true;});loadPadFont().then(()=>{if(!disposed){draw();texture.needsUpdate=true;}}).catch(()=>{});
+  // Follow the tapered tower, just outside its raised stripe bands.
+  const bottom=5,top=11.6,arc=2.2,geometry=new THREE.CylinderGeometry(1.9-top*.05+.08,1.9-bottom*.05+.08,top-bottom,48,1,true,facing-arc/2,arc);
+  const paint=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({map:texture,transparent:true,depthWrite:false,roughness:1,polygonOffset:true,polygonOffsetFactor:-2}));
+  paint.name='Lighthouse graffiti · No Churro Zone!';paint.position.y=(bottom+top)/2;paint.receiveShadow=true;tower.add(paint);return paint;
+}
 const SOURCE_WIDTH=1062,SOURCE_HEIGHT=1314;
 function canvas(){const c=document.createElement('canvas');c.width=SOURCE_WIDTH;c.height=SOURCE_HEIGHT;return c;}
 function path(ctx,draw){ctx.beginPath();draw(ctx);ctx.closePath();ctx.fill();}

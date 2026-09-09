@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import {FootprintTrail} from './footprints.js';
 import {padTimeline} from './leaky-pad.js';
-import {BLOOD_RED,bloodMask,bloodTopShader,sourceArt,startArrow,loadPadFont} from './pad-art.js';
+import {BLOOD_RED,bloodMask,bloodTopShader,sourceArt,startArrow,loadPadFont,lighthouseGraffiti} from './pad-art.js';
 
 const material=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.85,...extra});
 const point=(maze,[x,y])=>new THREE.Vector3((x/maze.sourceStep-maze.width/2)*maze.cellSize,0,(y/maze.sourceStep-maze.height/2)*maze.cellSize);
@@ -72,6 +72,7 @@ export class PadWorld{
     add(tower,new THREE.CylinderGeometry(3.3,4.2,2,32),ivory,0,-.8);
     const shaft=add(tower,new THREE.CylinderGeometry(1.1,1.9,16,32),ivory,0,8);shaft.castShadow=true;
     for(const y of [3.5,7.5,11.5])add(tower,new THREE.CylinderGeometry(1.9-y*.05,2-y*.05,1.3,32),stripe,0,y);
+    const entrance=maze.point(maze.startIndex);this.graffiti=lighthouseGraffiti(tower,Math.atan2(entrance.x-location.x,entrance.z-location.z));
     add(tower,new THREE.CylinderGeometry(2.35,2.1,.32,32),steel,0,16.25);
     for(let i=0;i<10;i++){const a=i*Math.PI/5;add(tower,new THREE.CylinderGeometry(.045,.045,1.1,6),steel,Math.sin(a)*2.15,16.95,Math.cos(a)*2.15);}
     const rail=add(tower,new THREE.TorusGeometry(2.15,.06,6,32),steel,0,17.5);rail.rotation.x=Math.PI/2;
