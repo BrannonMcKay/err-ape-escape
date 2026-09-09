@@ -1,6 +1,6 @@
 // The Leaky Pad's rules use active soundtrack time, never wall time or preview time.
 export const PAD_RULES=Object.freeze({firstRelease:30,releaseEvery:8,redLightsAt:29,size:1/3,firstSpeed:1.5,speedGrowth:1.1,tossChance:.5,attachmentsToTackle:3,oceanRedAt:60,sunsetAt:89,flightSeconds:4.8,tossCaptionSeconds:8});
-export const PAD_POWER_WINDOWS=Object.freeze([Object.freeze([93,112]),Object.freeze([186,204])]);
+export const PAD_POWER_WINDOWS=Object.freeze([Object.freeze([93.5,112]),Object.freeze([186,204])]);
 export const STUBBY_POWER_SECONDS=18;
 const NO_POWER=Object.freeze({active:false,index:-1,remaining:0,speedMultiplier:1});
 export function padPower(round){
